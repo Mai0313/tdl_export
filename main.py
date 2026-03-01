@@ -34,7 +34,6 @@ def download_media(group_id: str) -> None:
             all_dates.append(message_obj.date)
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
             os.system(f"tdl download --url {target_url} --group --skip-same --threads 64")  # noqa: S605
-        break
 
 
 if __name__ == "__main__":
