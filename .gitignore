@@ -9,4 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-/tdl-export.json
+/downloads
+/data
