@@ -1,8 +1,9 @@
+import os
 import json
 from pathlib import Path
-from pydantic import BaseModel, Field
 from datetime import datetime
-import os
+
+from pydantic import Field, BaseModel
 
 
 class Message(BaseModel):
@@ -18,7 +19,9 @@ def download_media(group_id: str) -> None:
 
     if not chat_path.exists():
         chat_path.parent.mkdir(exist_ok=True, parents=True)
-        os.system(f"tdl chat export --chat {group_id} --all --with-content --output {chat_path.as_posix()}")
+        os.system(
+            f"tdl chat export --chat {group_id} --all --with-content --output {chat_path.as_posix()}"
+        )
 
     chat_content = chat_path.read_text()
     chat_dict = json.loads(chat_content)
@@ -32,9 +35,11 @@ def download_media(group_id: str) -> None:
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
             os.system(f"tdl download --url {target_url} --group --skip-same")
 
+
 def main() -> None:
     group_id = "3310384808"
     download_media(group_id=group_id)
+
 
 if __name__ == "__main__":
     main()
