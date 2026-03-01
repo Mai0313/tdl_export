@@ -33,7 +33,7 @@ def download_media(group_id: str) -> None:
         if message_obj.date not in all_dates:
             all_dates.append(message_obj.date)
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
-            os.system(f"tdl download --url {target_url} --group --skip-same --threads 64")  # noqa: S605
+            os.system(f"tdl download --url {target_url} --group --threads 64")  # noqa: S605
 
 
 if __name__ == "__main__":
