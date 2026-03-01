@@ -9,10 +9,10 @@ class Message(BaseModel):
     id: int = Field(..., description="The Message ID")
     type: str = Field(..., description="The type of the message")
     file: str = Field(..., description="This is the file name")
-    date: datetime
+    date: int
 
 
-def download_media(group_id: str):
+def download_media(group_id: str) -> None:
     today = datetime.now().date().strftime("%Y-%m-%d")
     chat_path = Path(f"./data/{today}_{group_id}.json")
 
@@ -32,6 +32,9 @@ def download_media(group_id: str):
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
             os.system(f"tdl download --url {target_url} --group --skip-same")
 
-if __name__ == "__main__":
+def main() -> None:
     group_id = "3310384808"
     download_media(group_id=group_id)
+
+if __name__ == "__main__":
+    main()
