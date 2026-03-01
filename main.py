@@ -27,7 +27,6 @@ def download_media(group_id: str):
     all_dates = []
     for message in chat_messages:
         message_obj = Message(**message)
-        # https://t.me/c/3310384808/2025
         if message_obj.date not in all_dates:
             all_dates.append(message_obj.date)
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
