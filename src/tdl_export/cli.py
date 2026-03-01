@@ -19,7 +19,7 @@ def download_media(group_id: str) -> None:
 
     if not chat_path.exists():
         chat_path.parent.mkdir(exist_ok=True, parents=True)
-        os.system(
+        os.system(  # noqa: S605
             f"tdl chat export --chat {group_id} --all --with-content --output {chat_path.as_posix()}"
         )
 
@@ -33,7 +33,7 @@ def download_media(group_id: str) -> None:
         if message_obj.date not in all_dates:
             all_dates.append(message_obj.date)
             target_url = f"https://t.me/c/{group_id}/{message_obj.id}"
-            os.system(f"tdl download --url {target_url} --group --skip-same")
+            os.system(f"tdl download --url {target_url} --group --skip-same")  # noqa: S605
 
 
 def main() -> None:
