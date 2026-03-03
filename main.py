@@ -106,9 +106,8 @@ def download_media(group_id: str) -> None:
 
     # ── Step 5: Save final state ──────────────────────────────────────────────
     console.rule("[bold cyan]Step 5: Saving final downloaded state")
-    chat_path.write_text(
-        combined_chat_data.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    combined_chat_data_json = combined_chat_data.model_dump_json(indent=2, ensure_ascii=False)
+    chat_path.write_text(combined_chat_data_json, encoding="utf-8")
     console.print(f"[green]Done! Final data saved to {chat_path}")
 
 
