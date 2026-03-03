@@ -101,7 +101,7 @@ def download_media(group_id: str) -> None:
 
         target_url = f"https://t.me/c/{group_id}/{message.id}"
         console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-        # os.system(f"tdl download --url {target_url} --threads 64")  # noqa: S605
+        os.system(f"tdl download --url {target_url} --threads 64")  # noqa: S605
         message.downloaded = True
 
     # ── Step 5: Save final state ──────────────────────────────────────────────
