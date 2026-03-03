@@ -86,10 +86,9 @@ def download_media(group_id: str) -> None:
         os.system(download_command)  # noqa: S605
         message.downloaded = True
 
-    # ── Step 5: Save final state ──────────────────────────────────────────────
-    console.rule("[bold cyan]Step 5: Saving final downloaded state")
     combined_chat_data_json = combined_chat_data.model_dump_json(indent=2, ensure_ascii=False)
     original_chat_path.write_text(combined_chat_data_json, encoding="utf-8")
+    console.rule("[bold cyan]Final Data Saved")
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
