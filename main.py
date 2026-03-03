@@ -53,7 +53,7 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
 
 def download_media(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
-    new_chat_path = Path(f"./data/{group_id}_new.json")
+    new_chat_path = Path(f"./data/{group_id}.temp")
 
     original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
