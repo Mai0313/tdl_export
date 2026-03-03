@@ -18,22 +18,20 @@ class Message(BaseModel):
 
 
 class ChatData(BaseModel):
-    id: int = Field(..., description="The Chat or Group ID")
-    messages: list[Message]
+    id: int = Field(default=0, description="The Chat or Group ID")
+    messages: list[Message] = Field(default_factory=list)
 
 
-def load_chat_data(path: Path) -> ChatData | None:
+def load_chat_data(path: Path) -> ChatData:
+    """Read a JSON file and parse it into a ChatData. Returns an empty ChatData if file doesn't exist."""
     if not path.exists():
-        return None
+        return ChatData()
     content = path.read_text(encoding="utf-8")
     content_dict = json.loads(content)
     return ChatData(**content_dict)
 
 
-def merge_chat_data(original: ChatData | None, new: ChatData) -> ChatData:
-    if original is None:
-        return new
-
+def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
     # Build a lookup map from original data keyed by (id, date)
     original_map: dict[tuple[int, int], Message] = {
         (msg.id, msg.date): msg for msg in original.messages
@@ -62,8 +60,8 @@ def download_media(group_id: str) -> None:
     original_chat_data = load_chat_data(original_chat_path)
     console.rule("[bold cyan]Original Chat Data Loaded")
 
-    export_commane = f"tdl chat export --chat {group_id} --all --with-content --output {original_chat_path.as_posix()}"
-    os.system(export_commane)  # noqa: S605
+    export_command = f"tdl chat export --chat {group_id} --all --with-content --output {new_chat_path.as_posix()}"
+    os.system(export_command)  # noqa: S605
 
     new_chat_data = load_chat_data(new_chat_path)
     new_chat_path.unlink(missing_ok=True)
