@@ -1,7 +1,6 @@
 import os
 import json
 from pathlib import Path
-from datetime import datetime
 
 from pydantic import Field, BaseModel
 
@@ -15,8 +14,7 @@ class Message(BaseModel):
 
 
 def download_media(group_id: str) -> None:
-    today = datetime.now().date().strftime("%Y-%m-%d")
-    chat_path = Path(f"./data/{today}_{group_id}.json")
+    chat_path = Path(f"./data/{group_id}.json")
 
     if not chat_path.exists():
         chat_path.parent.mkdir(exist_ok=True, parents=True)
