@@ -10,6 +10,7 @@ class Message(BaseModel):
     id: int = Field(..., description="The Message ID")
     type: str = Field(..., description="The type of the message")
     file: str = Field(..., description="This is the file name")
+    downloaded: bool = Field(default=False, description="Whether the file is downloaded or not")
     date: int
 
 
