@@ -2,6 +2,7 @@
 
 目前我有新增一個 `downloaded` 到 `Message` 的 model 中，這個欄位是用來表示檔案是否已經下載了
 我的計畫是
+
 - 讀取 `./data/{group_id}.json`
 - 執行 `tdl chat export ...` 並與 `./data/{group_id}.json` 合併
 - 將合併完畢的 `./data/{group_id}.json` 加上 `downloaded` 欄位 (預設 False) 後重新存檔覆蓋
