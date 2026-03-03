@@ -33,6 +33,10 @@ def load_chat_data(path: Path) -> ChatData | None:
 def merge_chat_data(original: ChatData | None, new: ChatData) -> ChatData:
     if original is None:
         return new
+    if new is None:
+        return original
+    if new is None and original is None:
+        raise ValueError("Both original and new chat data cannot be None")
 
     # Build a lookup map from original data keyed by (id, date)
     original_map: dict[tuple[int, int], Message] = {
