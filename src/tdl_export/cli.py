@@ -128,7 +128,7 @@ def download_media(group_id: str, from_file: bool = True) -> None:
         save_chat_data(path=temp_chat_path, chat_data=undownloaded)
         console.rule("[bold cyan]Checked Existing Local Files")
 
-        console.rule("[bold cyan]Start Downloading Media")
+        console.rule("[bold cyan]Start Downloading Media From File")
         download_command = ["tdl", "dl", "-f", f"{temp_chat_path}", "-d", str(download_path)]
         subprocess.run(download_command, check=True)  # noqa: S603
         temp_chat_path.unlink(missing_ok=True)
