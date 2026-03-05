@@ -92,7 +92,7 @@ def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
     return chat_data
 
 
-def main(group_id: str) -> None:
+def download_media(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
     download_path = Path(f"./downloads/{group_id}")
@@ -141,6 +141,9 @@ def main(group_id: str) -> None:
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
-if __name__ == "__main__":
+def main():
     group_id = "3310384808"
-    main(group_id=group_id)
+    download_media(group_id=group_id)
+
+if __name__ == "__main__":
+    main()
