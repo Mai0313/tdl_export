@@ -135,6 +135,7 @@ def download_media(group_id: str) -> None:
         subprocess.run(download_command, check=True)  # noqa: S603
         message.downloaded = True
 
+    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
     save_chat_data(path=original_chat_path, chat_data=combined_chat_data)
     console.rule("[bold cyan]Final Data Saved")
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
