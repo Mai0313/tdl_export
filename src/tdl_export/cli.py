@@ -175,6 +175,7 @@ def download_media_from_file(group_id: str) -> None:
     console.rule("[bold cyan]Start Downloading Media")
     download_command = ["tdl", "dl", "-f", f"{temp_path}", "-d", str(download_path)]
     subprocess.run(download_command, check=True)  # noqa: S603
+    temp_path.unlink(missing_ok=True)
 
     result = check_chat_data(path=download_path, chat_data=chat_data, remove=False)
     save_chat_data(path=chat_path, chat_data=result)
