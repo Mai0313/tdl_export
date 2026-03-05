@@ -54,7 +54,7 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
 def download_media(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
-    media_output_path = Path(f"./downloads/group_{group_id}")
+    media_output = Path(f"./downloads/group_{group_id}")
 
     original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
@@ -77,9 +77,7 @@ def download_media(group_id: str) -> None:
 
         target_url = f"https://t.me/c/{group_id}/{message.id}"
         console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-        download_command = (
-            f"tdl download --url {target_url} --dir {media_output_path} --threads 64"
-        )
+        download_command = f"tdl dl -u {target_url} -d {media_output} -t 64"
         os.system(download_command)  # noqa: S605
         message.downloaded = True
 
@@ -90,5 +88,5 @@ def download_media(group_id: str) -> None:
 
 
 if __name__ == "__main__":
-    group_id = "3310384808"
+    group_id = "8464298774"
     download_media(group_id=group_id)
