@@ -1,6 +1,6 @@
-import os
 import json
 from pathlib import Path
+import subprocess
 
 from pydantic import Field, BaseModel
 from rich.console import Console
@@ -58,35 +58,58 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
 
 
 def get_all_current_file(output_path: Path) -> list[FileInfo]:
-    all_files = list(output_path.glob("**/*"))
-    filenames = [f.name for f in all_files]
+    if not output_path.exists():
+        return []
+
+    all_files = [f for f in output_path.glob("**/*") if f.is_file()]
     file_info: list[FileInfo] = []
-    for filename in filenames:
-        group_id, message_id, message_filename, *_ = filename.split("_")
-        file_data = FileInfo(
-            group_id=int(group_id), message_id=int(message_id), message_filename=message_filename
-        )
-        file_info.append(file_data)
+    for f in all_files:
+        # 使用 maxsplit=2 確保我們只以最前面的兩個底線來切分，避免檔名中也含有底線而導致錯誤
+        parts = f.name.split("_", maxsplit=2)
+        if len(parts) == 3:
+            file_data = FileInfo(
+                group_id=int(parts[0]),  # 3310384808
+                message_id=int(parts[1]),  # 37
+                message_filename=parts[2],  # 6170222615722053134.jpg
+            )
+            file_info.append(file_data)
     return file_info
 
 
-def check_chat_data(chat_path: Path) -> ChatData:
-    chat_data = load_chat_data(chat_path)
+def check_chat_data(chat_data: ChatData, current_files: list[FileInfo]) -> ChatData:
+    # 建立一個已下載 message_id 的集合，加快查詢速度
+    downloaded_msg_ids = {f.message_id for f in current_files}
+
+    for message in chat_data.messages:
+        # 檢查該 message 是否已經在我們本地的資料夾中
+        if message.id in downloaded_msg_ids:
+            message.downloaded = True
+
     return chat_data
 
 
 def download_media(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
-    output_path = Path(f"./downloads/{group_id}")
+    download_path = Path(f"./downloads/{group_id}")
 
     original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
     original_chat_data = load_chat_data(original_chat_path)
     console.rule("[bold cyan]Original Chat Data Loaded")
 
-    export_command = f"tdl chat export --chat {group_id} --all --with-content --output {new_chat_path.as_posix()}"
-    os.system(export_command)  # noqa: S605
+    export_command = [
+        "tdl",
+        "chat",
+        "export",
+        "--chat",
+        str(group_id),
+        "--all",
+        "--with-content",
+        "--output",
+        new_chat_path.as_posix(),
+    ]
+    subprocess.run(export_command, check=True)  # noqa: S603
 
     new_chat_data = load_chat_data(new_chat_path)
     new_chat_path.unlink(missing_ok=True)
@@ -95,14 +118,18 @@ def download_media(group_id: str) -> None:
     combined_chat_data = merge_chat_data(original_chat_data, new_chat_data)
     console.rule("[bold cyan]Chat Data Merged")
 
+    current_files = get_all_current_file(download_path)
+    combined_chat_data = check_chat_data(combined_chat_data, current_files)
+    console.rule("[bold cyan]Checked Existing Local Files")
+
     for message in combined_chat_data.messages:
         if message.downloaded or not message.file:
             continue
 
         target_url = f"https://t.me/c/{group_id}/{message.id}"
         console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-        download_command = f"tdl dl -u {target_url} -d {output_path} -t 64"
-        os.system(download_command)  # noqa: S605
+        download_command = ["tdl", "dl", "-u", target_url, "-d", str(download_path), "-t", "64"]
+        subprocess.run(download_command, check=True)  # noqa: S603
         message.downloaded = True
 
     combined_chat_data_json = combined_chat_data.model_dump_json(indent=2, ensure_ascii=False)
