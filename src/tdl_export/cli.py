@@ -141,9 +141,10 @@ def download_media(group_id: str) -> None:
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
-def main():
+def main() -> None:
     group_id = "3310384808"
     download_media(group_id=group_id)
+
 
 if __name__ == "__main__":
     main()

@@ -30,18 +30,18 @@
 
 ### 前置要求
 
-1.  已安裝 **Python 3.11+**。
-2.  已安裝 **uv** 套件管理器。
-3.  已安裝 **tdl CLI** 並且已登入您的 Telegram 帳號。
+1. 已安裝 **Python 3.11+**。
+2. 已安裝 **uv** 套件管理器。
+3. 已安裝 **tdl CLI** 並且已登入您的 Telegram 帳號。
 
 ### 安裝步驟
 
-1.  複製倉庫：
+1. 複製倉庫：
     ```bash
     git clone https://github.com/Mai0313/tdl_export.git
     cd tdl_export
     ```
-2.  安裝依賴：
+2. 安裝依賴：
     ```bash
     uv sync
     ```

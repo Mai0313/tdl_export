@@ -30,18 +30,18 @@ Other Languages: [English](README.md) | [繁體中文](README.zh-TW.md) | [简�
 
 ### Prerequisites
 
-1.  **Python 3.11+** installed.
-2.  **uv** package manager installed.
-3.  **tdl CLI** installed and logged into your Telegram account.
+1. **Python 3.11+** installed.
+2. **uv** package manager installed.
+3. **tdl CLI** installed and logged into your Telegram account.
 
 ### Setup
 
-1.  Clone the repository:
+1. Clone the repository:
     ```bash
     git clone https://github.com/Mai0313/tdl_export.git
     cd tdl_export
     ```
-2.  Install dependencies:
+2. Install dependencies:
     ```bash
     uv sync
     ```
