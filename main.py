@@ -22,6 +22,12 @@ class ChatData(BaseModel):
     messages: list[Message] = Field(default_factory=list)
 
 
+class FileInfo(BaseModel):
+    group_id: int
+    message_id: int
+    message_filename: str
+
+
 def load_chat_data(path: Path) -> ChatData:
     """Read a JSON file and parse it into a ChatData. Returns an empty ChatData if file doesn't exist."""
     if not path.exists():
@@ -51,10 +57,28 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
     return ChatData(id=new.id, messages=sorted_messages)
 
 
+def get_all_current_file(output_path: Path) -> list[FileInfo]:
+    all_files = list(output_path.glob("**/*"))
+    filenames = [f.name for f in all_files]
+    file_info: list[FileInfo] = []
+    for filename in filenames:
+        group_id, message_id, message_filename, *_ = filename.split("_")
+        file_data = FileInfo(
+            group_id=int(group_id), message_id=int(message_id), message_filename=message_filename
+        )
+        file_info.append(file_data)
+    return file_info
+
+
+def check_chat_data(chat_path: Path) -> ChatData:
+    chat_data = load_chat_data(chat_path)
+    return chat_data
+
+
 def download_media(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
-    media_output = Path(f"./downloads/group_{group_id}")
+    output_path = Path(f"./downloads/{group_id}")
 
     original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
@@ -77,7 +101,7 @@ def download_media(group_id: str) -> None:
 
         target_url = f"https://t.me/c/{group_id}/{message.id}"
         console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-        download_command = f"tdl dl -u {target_url} -d {media_output} -t 64"
+        download_command = f"tdl dl -u {target_url} -d {output_path} -t 64"
         os.system(download_command)  # noqa: S605
         message.downloaded = True
 
@@ -88,5 +112,5 @@ def download_media(group_id: str) -> None:
 
 
 if __name__ == "__main__":
-    group_id = "8464298774"
+    group_id = "3310384808"
     download_media(group_id=group_id)
