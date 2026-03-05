@@ -61,11 +61,11 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
     return ChatData(id=new.id, messages=sorted_messages)
 
 
-def get_all_current_file(download_path: Path) -> list[FileInfo]:
-    if not download_path.exists():
+def get_all_current_file(path: Path) -> list[FileInfo]:
+    if not path.exists():
         return []
 
-    all_files = [f for f in download_path.glob("**/*") if f.is_file()]
+    all_files = [f for f in path.glob("**/*") if f.is_file()]
     file_info: list[FileInfo] = []
     for f in all_files:
         # 使用 maxsplit=2 確保我們只以最前面的兩個底線來切分，避免檔名中也含有底線而導致錯誤
@@ -80,8 +80,8 @@ def get_all_current_file(download_path: Path) -> list[FileInfo]:
     return file_info
 
 
-def check_chat_data(chat_data: ChatData, current_files: list[FileInfo]) -> ChatData:
-    # 建立一個已下載 message_id 的集合，加快查詢速度
+def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
+    current_files = get_all_current_file(path=path)
     downloaded_msg_ids = {f.message_id for f in current_files}
 
     for message in chat_data.messages:
@@ -122,8 +122,7 @@ def download_media(group_id: str) -> None:
     combined_chat_data = merge_chat_data(original=original_chat_data, new=new_chat_data)
     console.rule("[bold cyan]Chat Data Merged")
 
-    current_files = get_all_current_file(download_path=download_path)
-    combined_chat_data = check_chat_data(chat_data=combined_chat_data, current_files=current_files)
+    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
     console.rule("[bold cyan]Checked Existing Local Files")
 
     for message in combined_chat_data.messages:
