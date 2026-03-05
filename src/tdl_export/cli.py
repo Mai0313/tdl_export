@@ -80,7 +80,7 @@ def get_all_current_file(path: Path) -> list[FileInfo]:
     return file_info
 
 
-def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
+def check_chat_data(path: Path, chat_data: ChatData, remove: bool = False) -> ChatData:
     current_files = get_all_current_file(path=path)
     downloaded_msg_ids = {f.message_id for f in current_files}
 
@@ -88,6 +88,10 @@ def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
         # 檢查該 message 是否已經在我們本地的資料夾中
         if message.id in downloaded_msg_ids:
             message.downloaded = True
+
+    # 如果 remove=True，則從 chat_data 中移除已下載的訊息
+    if remove:
+        chat_data.messages = [msg for msg in chat_data.messages if not msg.downloaded]
 
     return chat_data
 
@@ -119,13 +123,13 @@ def download_media(group_id: str) -> None:
     new_chat_path.unlink(missing_ok=True)
     console.rule("[bold cyan]New Chat Data Loaded")
 
-    combined_chat_data = merge_chat_data(original=original_chat_data, new=new_chat_data)
+    combined = merge_chat_data(original=original_chat_data, new=new_chat_data)
     console.rule("[bold cyan]Chat Data Merged")
 
-    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
+    combined = check_chat_data(path=download_path, chat_data=combined, remove=False)
     console.rule("[bold cyan]Checked Existing Local Files")
 
-    for message in combined_chat_data.messages:
+    for message in combined.messages:
         if message.downloaded or not message.file:
             continue
 
@@ -135,15 +139,51 @@ def download_media(group_id: str) -> None:
         subprocess.run(download_command, check=True)  # noqa: S603
         message.downloaded = True
 
-    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
-    save_chat_data(path=original_chat_path, chat_data=combined_chat_data)
+    combined = check_chat_data(path=download_path, chat_data=combined, remove=False)
+    save_chat_data(path=original_chat_path, chat_data=combined)
     console.rule("[bold cyan]Final Data Saved")
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
+def download_media_from_file(group_id: str) -> None:
+    chat_path = Path(f"./data/{group_id}.json")
+    temp_path = Path(f"./data/{group_id}.temp")
+    download_path = Path(f"./downloads/{group_id}")
+
+    chat_path.parent.mkdir(exist_ok=True, parents=True)
+
+    export_command = [
+        "tdl",
+        "chat",
+        "export",
+        "--chat",
+        str(group_id),
+        "--all",
+        "--with-content",
+        "--output",
+        chat_path.as_posix(),
+    ]
+    subprocess.run(export_command, check=True)  # noqa: S603
+
+    chat_data = load_chat_data(path=chat_path)
+    console.rule("[bold cyan]New Chat Data Loaded")
+
+    undownloaded = check_chat_data(path=download_path, chat_data=chat_data, remove=True)
+    save_chat_data(path=temp_path, chat_data=undownloaded)
+    console.rule("[bold cyan]Checked Existing Local Files")
+
+    console.rule("[bold cyan]Start Downloading Media")
+    download_command = ["tdl", "dl", "-f", f"{temp_path}", "-d", str(download_path)]
+    subprocess.run(download_command, check=True)  # noqa: S603
+
+    result = check_chat_data(path=download_path, chat_data=chat_data, remove=False)
+    save_chat_data(path=chat_path, chat_data=result)
+    console.rule("[bold cyan]Final Data Saved")
+
+
 def main() -> None:
     group_id = "3310384808"
-    download_media(group_id=group_id)
+    download_media_from_file(group_id=group_id)
 
 
 if __name__ == "__main__":
