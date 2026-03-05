@@ -99,7 +99,7 @@ def download_media(group_id: str) -> None:
 
     original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
-    original_chat_data = load_chat_data(original_chat_path)
+    original_chat_data = load_chat_data(path=original_chat_path)
     console.rule("[bold cyan]Original Chat Data Loaded")
 
     export_command = [
@@ -115,7 +115,7 @@ def download_media(group_id: str) -> None:
     ]
     subprocess.run(export_command, check=True)  # noqa: S603
 
-    new_chat_data = load_chat_data(new_chat_path)
+    new_chat_data = load_chat_data(path=new_chat_path)
     new_chat_path.unlink(missing_ok=True)
     console.rule("[bold cyan]New Chat Data Loaded")
 
