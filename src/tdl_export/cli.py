@@ -97,13 +97,13 @@ def check_chat_data(path: Path, chat_data: ChatData, remove: bool = False) -> Ch
 
 
 def download_media(group_id: str) -> None:
-    chat_path = Path(f"./data/{group_id}.json")
+    original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
     download_path = Path(f"./downloads/{group_id}")
 
-    chat_path.parent.mkdir(exist_ok=True, parents=True)
+    original_chat_path.parent.mkdir(exist_ok=True, parents=True)
 
-    original_chat_data = load_chat_data(path=chat_path)
+    original_chat_data = load_chat_data(path=original_chat_path)
     console.rule("[bold cyan]Original Chat Data Loaded")
 
     export_command = [
@@ -140,9 +140,9 @@ def download_media(group_id: str) -> None:
         message.downloaded = True
 
     combined = check_chat_data(path=download_path, chat_data=combined, remove=False)
-    save_chat_data(path=chat_path, chat_data=combined)
+    save_chat_data(path=original_chat_path, chat_data=combined)
     console.rule("[bold cyan]Final Data Saved")
-    console.print(f"[green]Done! Final data saved to {chat_path}")
+    console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
 def download_media_from_file(group_id: str) -> None:
