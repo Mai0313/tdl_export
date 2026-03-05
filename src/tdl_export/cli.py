@@ -92,7 +92,7 @@ def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
     return chat_data
 
 
-def download_media(group_id: str) -> None:
+def main(group_id: str) -> None:
     original_chat_path = Path(f"./data/{group_id}.json")
     new_chat_path = Path(f"./data/{group_id}.temp")
     download_path = Path(f"./downloads/{group_id}")
@@ -143,4 +143,4 @@ def download_media(group_id: str) -> None:
 
 if __name__ == "__main__":
     group_id = "3310384808"
-    download_media(group_id=group_id)
+    main(group_id=group_id)
