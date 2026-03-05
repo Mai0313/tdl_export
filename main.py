@@ -8,6 +8,12 @@ from rich.console import Console
 console = Console()
 
 
+class FileInfo(BaseModel):
+    group_id: int
+    message_id: int
+    message_filename: str
+
+
 class Message(BaseModel):
     id: int = Field(..., description="The Message ID")
     type: str = Field(..., description="The type of the message")
@@ -22,12 +28,6 @@ class ChatData(BaseModel):
     messages: list[Message] = Field(default_factory=list)
 
 
-class FileInfo(BaseModel):
-    group_id: int
-    message_id: int
-    message_filename: str
-
-
 def load_chat_data(path: Path) -> ChatData:
     """Read a JSON file and parse it into a ChatData. Returns an empty ChatData if file doesn't exist."""
     if not path.exists():
@@ -35,6 +35,12 @@ def load_chat_data(path: Path) -> ChatData:
     content = path.read_text(encoding="utf-8")
     content_dict = json.loads(content)
     return ChatData(**content_dict)
+
+
+def save_chat_data(path: Path, chat_data: ChatData) -> ChatData:
+    chat_data_json = chat_data.model_dump_json(indent=2, ensure_ascii=False)
+    path.write_text(chat_data_json, encoding="utf-8")
+    return chat_data
 
 
 def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
@@ -48,20 +54,18 @@ def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
     for msg in new.messages:
         key = (msg.id, msg.date)
         if key not in merged_map:
-            # New message not seen before — add it
             merged_map[key] = msg
 
-    # Sort by id descending to keep the same ordering as tdl export output
     sorted_messages = sorted(merged_map.values(), key=lambda m: m.id, reverse=True)
 
     return ChatData(id=new.id, messages=sorted_messages)
 
 
-def get_all_current_file(output_path: Path) -> list[FileInfo]:
-    if not output_path.exists():
+def get_all_current_file(download_path: Path) -> list[FileInfo]:
+    if not download_path.exists():
         return []
 
-    all_files = [f for f in output_path.glob("**/*") if f.is_file()]
+    all_files = [f for f in download_path.glob("**/*") if f.is_file()]
     file_info: list[FileInfo] = []
     for f in all_files:
         # 使用 maxsplit=2 確保我們只以最前面的兩個底線來切分，避免檔名中也含有底線而導致錯誤
@@ -115,11 +119,11 @@ def download_media(group_id: str) -> None:
     new_chat_path.unlink(missing_ok=True)
     console.rule("[bold cyan]New Chat Data Loaded")
 
-    combined_chat_data = merge_chat_data(original_chat_data, new_chat_data)
+    combined_chat_data = merge_chat_data(original=original_chat_data, new=new_chat_data)
     console.rule("[bold cyan]Chat Data Merged")
 
-    current_files = get_all_current_file(download_path)
-    combined_chat_data = check_chat_data(combined_chat_data, current_files)
+    current_files = get_all_current_file(download_path=download_path)
+    combined_chat_data = check_chat_data(chat_data=combined_chat_data, current_files=current_files)
     console.rule("[bold cyan]Checked Existing Local Files")
 
     for message in combined_chat_data.messages:
@@ -132,8 +136,7 @@ def download_media(group_id: str) -> None:
         subprocess.run(download_command, check=True)  # noqa: S603
         message.downloaded = True
 
-    combined_chat_data_json = combined_chat_data.model_dump_json(indent=2, ensure_ascii=False)
-    original_chat_path.write_text(combined_chat_data_json, encoding="utf-8")
+    save_chat_data(path=original_chat_path, chat_data=combined_chat_data)
     console.rule("[bold cyan]Final Data Saved")
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
