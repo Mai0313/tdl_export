@@ -144,16 +144,7 @@ def download_media(group_id: str, from_file: bool = True) -> None:
 
             target_url = f"https://t.me/c/{group_id}/{message.id}"
             console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-            download_command = [
-                "tdl",
-                "dl",
-                "-u",
-                target_url,
-                "-d",
-                str(download_path),
-                "-t",
-                "64",
-            ]
+            download_command = ["tdl", "dl", "-u", target_url, "-d", str(download_path)]
             subprocess.run(download_command, check=True)  # noqa: S603
             message.downloaded = True
 
@@ -165,7 +156,7 @@ def download_media(group_id: str, from_file: bool = True) -> None:
 
 def main() -> None:
     group_id = "3310384808"
-    download_media(group_id=group_id)
+    download_media(group_id=group_id, from_file=True)
 
 
 if __name__ == "__main__":
