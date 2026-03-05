@@ -15,52 +15,52 @@
 
 </div>
 
-🚀 **tdl_export** is an automated, resumable Telegram media downloader and chat exporter built on top of the [tdl](https://github.com/iyear/tdl) CLI tool.
+🚀 **tdl_export** 是一个基于 [tdl](https://github.com/iyear/tdl) 命令行工具构建的自动化、支持断点续传的 Telegram 媒体下载器和聊天记录导出工具。
 
-Other Languages: [English](README.md) | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
+其他语言: [English](README.md) | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
 
-## ✨ Highlights
+## ✨ 重点特色
 
-- **Automated Chat Export**: Uses `tdl chat export` to fetch messages and metadata from a specific Telegram group/channel.
-- **Resumable Downloads**: Tracks downloaded files and chat state locally in JSON format (e.g., `./data/<group_id>.json`).
-- **Duplicate Prevention**: Scans the local `./downloads/<group_id>` directory to skip already downloaded media files.
-- **Batch Media Download**: Automatically downloads all new media files using `tdl dl` with high concurrency.
+- **自动导出聊天记录**：使用 `tdl chat export` 获取指定 Telegram 群组或频道的历史消息和元数据。
+- **支持断点续传**：将聊天数据和下载状态记录在本地 JSON 文件中（如 `./data/<group_id>.json`）。
+- **避免重复下载**：自动扫描本地 `./downloads/<group_id>` 目录，跳过已下载的媒体文件。
+- **批量媒体下载**：自动调用 `tdl dl` 并发下载所有新增的媒体文件。
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### Prerequisites
+### 前置要求
 
-1.  **Python 3.11+** installed.
-2.  **uv** package manager installed.
-3.  **tdl CLI** installed and logged into your Telegram account.
+1.  已安装 **Python 3.11+**。
+2.  已安装 **uv** 包管理器。
+3.  已安装 **tdl CLI** 并已登录您的 Telegram 账号。
 
-### Setup
+### 安装步骤
 
-1.  Clone the repository:
+1.  克隆仓库：
     ```bash
     git clone https://github.com/Mai0313/tdl_export.git
     cd tdl_export
     ```
-2.  Install dependencies:
+2.  安装依赖：
     ```bash
     uv sync
     ```
 
-### Usage
+### 使用方法
 
-You can run the script using `uv`:
+您可以使用 `uv` 运行脚本：
 
 ```bash
 uv run tdl_export
 ```
 
-*(Note: The target Telegram group ID is currently set within the script's `main()` function. Modify `src/tdl_export/cli.py` to change the `group_id` before running.)*
+*（注：目标 Telegram 群组 ID 目前在脚本的 `main()` 函数中配置。运行前请修改 `src/tdl_export/cli.py` 以更改 `group_id`。）*
 
-## 📁 Directory Structure
+## 📁 目录结构
 
-- `data/`: Contains JSON files that track the exported chat history and download status for each group.
-- `downloads/`: The destination folder where all media files are saved, organized by group ID.
+- `data/`: 包含记录每个群组聊天历史和下载状态的 JSON 文件。
+- `downloads/`: 保存所有下载的媒体文件的目标文件夹，按群组 ID 分类。
 
-## 📄 License
+## 📄 授权
 
-MIT — see `LICENSE`.
+MIT — 详见 `LICENSE`。
