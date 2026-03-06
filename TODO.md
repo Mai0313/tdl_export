@@ -9,9 +9,10 @@ export chat data -> 確認本地是否有這個文件 -> 標記 downloaded -> �
 
 目前我已經將兩個 function 整合成一個 `download_media`
 但我發現最後面
+
 ```
     result = check_chat_data(path=download_path, chat_data=combined_chat_data)
     save_chat_data(path=original_chat_path, chat_data=result)
 ```
-存檔時 只存到了 downloaded = True 的那些資訊 我不確定到底是哪裡出問題 請你幫我調查
 
+存檔時 只存到了 downloaded = True 的那些資訊 我不確定到底是哪裡出問題 請你幫我調查
