@@ -122,31 +122,32 @@ def download_media(group_id: str, from_file: bool = True) -> None:
     combined_chat_data = merge_chat_data(original=original_chat_data, new=new_chat_data)
     console.rule("[bold cyan]Chat Data Merged")
 
+    # Check local files and mark as downloaded
+    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
+    console.rule("[bold cyan]Checked Existing Local Files")
+
+    # Filter out already downloaded items
+    undownloaded_messages = [msg for msg in combined_chat_data.messages if not msg.downloaded]
+
     if from_file:
-        undownloaded = check_chat_data(path=download_path, chat_data=combined_chat_data)
-        undownloaded.messages = [msg for msg in undownloaded.messages if not msg.downloaded]
-        save_chat_data(path=temp_chat_path, chat_data=undownloaded)
-        console.rule("[bold cyan]Checked Existing Local Files")
+        undownloaded_chat_data = ChatData(id=combined_chat_data.id, messages=undownloaded_messages)
+        save_chat_data(path=temp_chat_path, chat_data=undownloaded_chat_data)
 
         console.rule("[bold cyan]Start Downloading Media From File")
-        download_command = ["tdl", "dl", "-f", f"{temp_chat_path}", "-d", str(download_path)]
+        download_command = ["tdl", "dl", "-f", str(temp_chat_path), "-d", str(download_path)]
         subprocess.run(download_command, check=True)  # noqa: S603
         temp_chat_path.unlink(missing_ok=True)
 
     else:
-        undownloaded = check_chat_data(path=download_path, chat_data=combined_chat_data)
-        undownloaded.messages = [msg for msg in undownloaded.messages if not msg.downloaded]
-        console.rule("[bold cyan]Checked Existing Local Files")
         console.rule("[bold cyan]Start Downloading Media From Link")
-        for message in combined_chat_data.messages:
-            if message.downloaded or not message.file:
+        for message in undownloaded_messages:
+            if not message.file:
                 continue
 
             target_url = f"https://t.me/c/{group_id}/{message.id}"
             console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
             download_command = ["tdl", "dl", "-u", target_url, "-d", str(download_path)]
             subprocess.run(download_command, check=True)  # noqa: S603
-            message.downloaded = True
 
     result = check_chat_data(path=download_path, chat_data=combined_chat_data)
     save_chat_data(path=original_chat_path, chat_data=result)
