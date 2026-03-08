@@ -156,8 +156,9 @@ def download_media(group_id: str, from_file: bool = True) -> None:
 
 
 def main() -> None:
-    group_id = "3310384808"
-    download_media(group_id=group_id, from_file=True)
+    group_id_list = ["3310384808", "8464298774"]
+    for group_id in group_id_list:
+        download_media(group_id=group_id, from_file=True)
 
 
 if __name__ == "__main__":
