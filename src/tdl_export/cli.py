@@ -162,7 +162,7 @@ def main() -> None:
         "8229333075",
         "7974286223",
         "7479079265",
-        "8251677443"
+        "8251677443",
     ]
     for group_id in group_id_list:
         download_media(group_id=group_id, from_file=True)
