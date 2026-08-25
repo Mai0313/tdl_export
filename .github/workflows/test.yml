@@ -32,18 +32,15 @@ jobs:
         os:
           - ubuntu-latest
         python-version:
-          - "3.11"
           - "3.12"
           - "3.13"
+          - "3.14"
 
     timeout-minutes: 20
 
     steps:
-      - name: Disable SSL Verify
-        run: git config --global http.sslVerify false
-
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}

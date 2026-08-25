@@ -9,8 +9,8 @@ on:
 permissions: write-all
 
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -43,11 +43,8 @@ jobs:
             friendly_id: windows-arm64
 
     steps:
-      - name: Disable SSL Verify
-        run: git config --global http.sslVerify false
-
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -89,6 +86,10 @@ jobs:
           $bin = "${{ github.event.repository.name }}.exe"
           $zip = "${{ github.event.repository.name }}-v$version-${{ matrix.friendly_id }}.zip"
           Compress-Archive -Path "$dest\$bin" -DestinationPath "$dest\$zip" -Force
+          # Everything left in $dest gets uploaded and lands on the release, and
+          # both Windows targets name their binary the same, so leaving it here
+          # publishes one arch-ambiguous .exe that overwrites the other.
+          Remove-Item "$dest\$bin" -Force
 
       - name: Create .tar.gz (all platforms)
         if: ${{ !startsWith(matrix.runner, 'windows') }}
@@ -122,14 +123,11 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.11"
+          - "3.12"
 
     steps:
-      - name: Disable SSL Verify
-        run: git config --global http.sslVerify false
-
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -171,7 +169,7 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
         run: |
-          uv publish
+          uv publish --check-url https://pypi.org/simple/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
@@ -198,7 +196,7 @@ jobs:
           merge-multiple: true
 
       - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/**/*

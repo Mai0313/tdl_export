@@ -16,13 +16,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4.9.0
+        uses: actions/dependency-review-action@v5.0.0
 
   dependabot-auto-merge:
     name: Dependabot Auto Merge
@@ -33,21 +33,18 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Approve PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr review --approve "${{ github.event.pull_request.html_url }}"
 
-      - name: Enable auto-merge for minor and patch updates
-        if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      - name: Enable auto-merge for Dependabot PRs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge --squash --auto --delete-branch "${{ github.event.pull_request.html_url }}"

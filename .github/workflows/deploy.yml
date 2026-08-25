@@ -16,11 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Disable SSL Verify
-        run: git config --global http.sslVerify false
-
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -33,21 +30,23 @@ jobs:
 
       - name: Deploy docs
         run: |
-          mkdir docs
-          cp ./README.md ./docs/index.md
-          cp ./README.zh-CN.md ./docs/README.zh-CN.md
-          cp ./README.zh-TW.md ./docs/README.zh-TW.md
           uv sync --group docs
           uv run make gen-docs
-          uv run mkdocs build
+          uv run zensical build
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
+      # Suffix the artifact name with the attempt number so a re-run does not
+      # collide with the previous attempt's artifact (deploy-pages fails on
+      # duplicate names within one run).
       - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./site
+          name: github-pages-${{ github.run_attempt }}
 
       - name: Publish to GitHub Pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
