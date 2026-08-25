@@ -71,7 +71,7 @@ dependencies = [
     "rich>=14.3.3",
 ]
 readme = "README.md"
-requires-python = ">= 3.11"
+requires-python = ">= 3.12"
 license = { text = "MIT" }
 
 [project.urls]
@@ -89,7 +89,6 @@ dev = [
     "notebook",
     "poethepoet",
     "pre-commit",
-    "ty",
 ]
 test = [
     "genbadge[all]",
@@ -104,12 +103,11 @@ docs = [
     "griffe-typingdoc",
     "markdown-exec[ansi]",
     "mkdocs-autorefs",
-    "mkdocs-coverage",
-    "mkdocs-material",
     "mkdocstrings[python]",
     "rich",
     "ruff",
     "tabulate",
+    "zensical",
 ]
 
 [build-system]
@@ -148,7 +146,6 @@ exclude = [
     "/.nox",
     "/.cache",
     "/.pytest_cache",
-    "/.mypy_cache",
     "/.tox",
     "/.venv",
     "/.git",
@@ -169,8 +166,8 @@ main = "python ./src/tdl_export/cli.py"
 
 # Documentation
 docs_gen = "make gen-docs"
-docs_deploy = "mkdocs gh-deploy --force --clean"
-docs_run = "mkdocs serve"
+docs_deploy = "zensical build"
+docs_run = "zensical serve"
 gen = ["docs_gen", "docs_deploy"]
 docs = ["docs_gen", "docs_run"]
 
@@ -185,13 +182,11 @@ compile-bytecode = true
 # concurrent-builds = 4
 # concurrent-downloads = 4
 # concurrent-installs = 4
-index-strategy = "unsafe-best-match"
-link-mode = "copy"
-system-certs = true
-no-binary = false
+index-strategy = "first-index"
+system-certs = false
 offline = false
-prerelease = "if-necessary-or-explicit"
-preview = true
+prerelease = "if-necessary"
+preview-features = true
 
 # https://docs.astral.sh/uv/reference/settings/#index
 [[tool.uv.index]]
@@ -205,8 +200,12 @@ default = true
 
 [tool.uv.pip]
 universal = true
-annotation-style = "line"
+annotation-style = "split"
+compile-bytecode = true
+index-url = "https://pypi.org/simple"
 output-file = "requirements.txt"
+prerelease = "if-necessary"
+
 
 # ================== #
 #        RUFF        #
@@ -329,6 +328,7 @@ select = [
     # "ERA",  # eradicate
     "PD",  # pandas-vet
     # "PGH",  # pygrep-hooks
+    "PGH003",  # pygrep-hooks: blanket-type-ignore
     "PL",  # Pylint
     # "TRY",  # tryceratops
     "FLY",  # flynt
@@ -449,196 +449,13 @@ skip-magic-trailing-comma = true
 
 
 # ================== #
-#         ty         #
-# ================== #
-# https://docs.astral.sh/ty/reference/configuration/
-
-# Configures the enabled rules and their severity.
-# Keys are rule names or "all" to set a default for all rules.
-# Valid values: "ignore" | "warn" | "error"
-# Default: {}
-# Full rule list: https://docs.astral.sh/ty/reference/rules/
-[tool.ty.rules]
-# --- error (default) ---
-abstract-method-in-final-class        = "error"
-assert-type-unspellable-subtype       = "error"
-byte-string-type-annotation           = "error"
-call-abstract-method                  = "error"
-call-non-callable                     = "error"
-call-top-callable                     = "error"
-conflicting-argument-forms            = "error"
-conflicting-declarations              = "error"
-conflicting-metaclass                 = "error"
-cyclic-class-definition               = "error"
-cyclic-type-alias-definition          = "error"
-dataclass-field-order                 = "error"
-duplicate-base                        = "error"
-duplicate-kw-only                     = "error"
-empty-body                            = "error"
-escape-character-in-forward-annotation = "error"
-final-on-non-method                   = "error"
-final-without-value                   = "error"
-fstring-type-annotation               = "error"
-implicit-concatenated-string-type-annotation = "error"
-inconsistent-mro                      = "error"
-index-out-of-bounds                   = "error"
-instance-layout-conflict              = "error"
-invalid-argument-type                 = "error"
-invalid-assignment                    = "error"
-invalid-attribute-access              = "error"
-invalid-await                         = "error"
-invalid-base                          = "error"
-invalid-context-manager               = "error"
-invalid-dataclass                     = "error"
-invalid-dataclass-override            = "error"
-invalid-declaration                   = "error"
-invalid-exception-caught              = "error"
-invalid-explicit-override             = "error"
-invalid-frozen-dataclass-subclass     = "error"
-invalid-generic-class                 = "error"
-invalid-generic-enum                  = "error"
-invalid-key                           = "error"
-invalid-legacy-type-variable          = "error"
-invalid-match-pattern                 = "error"
-invalid-metaclass                     = "error"
-invalid-method-override               = "error"
-invalid-named-tuple                   = "error"
-invalid-newtype                       = "error"
-invalid-overload                      = "error"
-invalid-parameter-default             = "error"
-invalid-paramspec                     = "error"
-invalid-protocol                      = "error"
-invalid-raise                         = "error"
-invalid-return-type                   = "error"
-invalid-super-argument                = "error"
-invalid-syntax-in-forward-annotation  = "error"
-invalid-total-ordering                = "error"
-invalid-type-alias-type               = "error"
-invalid-type-arguments                = "error"
-invalid-type-checking-constant        = "error"
-invalid-type-form                     = "error"
-invalid-type-guard-call               = "error"
-invalid-type-guard-definition         = "error"
-invalid-type-variable-bound           = "error"
-invalid-type-variable-constraints     = "error"
-invalid-type-variable-default         = "error"
-invalid-typed-dict-header             = "error"
-invalid-typed-dict-statement          = "error"
-isinstance-against-protocol           = "error"
-isinstance-against-typed-dict         = "error"
-missing-argument                      = "error"
-missing-typed-dict-key                = "error"
-no-matching-overload                  = "error"
-not-iterable                          = "error"
-not-subscriptable                     = "error"
-override-of-final-method              = "error"
-override-of-final-variable            = "error"
-parameter-already-assigned            = "error"
-positional-only-parameter-as-kwarg    = "error"
-raw-string-type-annotation            = "error"
-shadowed-type-variable                = "error"
-static-assert-error                   = "error"
-subclass-of-final-class               = "error"
-super-call-in-named-tuple-method      = "error"
-too-many-positional-arguments         = "error"
-type-assertion-failure                = "error"
-unavailable-implicit-super-arguments  = "error"
-unknown-argument                      = "error"
-unresolved-attribute                  = "error"
-unresolved-import                     = "error"
-unresolved-reference                  = "error"
-unsupported-bool-conversion           = "error"
-unsupported-operator                  = "error"
-zero-stepsize-in-slice                = "error"
-
-# --- warn (default) ---
-ambiguous-protocol-member             = "warn"
-deprecated                            = "warn"
-ignore-comment-unknown-rule           = "warn"
-ineffective-final                     = "warn"
-invalid-ignore-comment                = "warn"
-invalid-legacy-positional-parameter   = "warn"
-possibly-missing-attribute            = "warn"
-possibly-missing-implicit-call        = "warn"
-redundant-cast                        = "warn"
-redundant-final-classvar              = "warn"
-undefined-reveal                      = "warn"
-unresolved-global                     = "warn"
-unsupported-base                      = "warn"
-unused-ignore-comment                 = "warn"
-unused-type-ignore-comment            = "warn"
-useless-overload-body                 = "warn"
-
-# --- ignore (default, disabled by default due to false positives) ---
-division-by-zero                      = "ignore"
-possibly-missing-import               = "ignore"
-possibly-unresolved-reference         = "ignore"
-unsupported-dynamic-base              = "ignore"
-
-# Analysis settings
-[tool.ty.analysis]
-# A list of module glob patterns for which `unresolved-import` diagnostics should be suppressed.
-allowed-unresolved-imports = []
-
-# A list of module glob patterns whose imports should be replaced with `typing.Any`.
-replace-imports-with-any = []
-
-# Whether ty should respect `type: ignore` comments.
-respect-type-ignore-comments = true
-
-# Environment settings
-[tool.ty.environment]
-# User-provided paths that should take first priority in module resolution.
-extra-paths = []
-
-# Path to your project's Python environment or interpreter.
-# python = null  # e.g. ".venv/bin/python3" or ".venv"
-
-# Specifies the target platform for analysis.
-# python-platform = "<current-platform>"  # "win32" | "darwin" | "android" | "ios" | "linux" | "all"
-
-# Specifies the version of Python used to analyze the source code.
-# python-version = "3.11"
-
-# The root paths of the project, used for finding first-party modules.
-# root = null  # e.g. ["./src", "./lib"]
-
-# Optional path to a custom typeshed directory.
-# typeshed = null  # e.g. "/path/to/custom/typeshed"
-
-# Source file settings
-[tool.ty.src]
-# A list of file/directory patterns to exclude from type checking.
-# exclude = null  # e.g. ["generated", "*.proto"]
-
-# A list of files and directories to check.
-# include = null  # e.g. ["src", "tests"]
-
-# Whether to automatically exclude files ignored by .ignore/.gitignore.
-respect-ignore-files = true
-
-# (Deprecated: use environment.root instead)
-# root = null
-
-# Terminal / output settings
-[tool.ty.terminal]
-# Use exit code 1 if there are any warning-level diagnostics.
-error-on-warning = true
-
-# The format used for printing diagnostic messages.
-# "full" | "concise" | "github" | "gitlab" | "junit"
-output-format = "concise"
-
-# ================== #
 #      Logfire       #
 # ================== #
 
 # For more info:
 # https://docs.pydantic.dev/logfire/api/logfire/#logfire.configure
 [tool.logfire]
-send_to_logfire = false
-token = false
-project_name = "tdl_export"
+service_name = "tdl_export"
 trace_sample_rate = 1.0
 console_colors = "auto"
 console_span_style = "show-parents"
@@ -666,37 +483,31 @@ ignore-words-list = ["ameba", "mke"]
 
 
 # ================== #
-#        Mypy        #
+#         ty         #
 # ================== #
 
-[tool.mypy]
-plugins = ["pydantic.mypy"]
-# strict = true
-explicit_package_bases = true
-cache_dir = "~/.cache/.mypy_cache"
-exclude = ["^tests/"]
-ignore_missing_imports = true
-warn_unused_configs = true
-warn_return_any = false
-warn_redundant_casts = true
-warn_unused_ignores = true
-disable_error_code = ["attr-defined", "prop-decorator"]
-follow_imports = "silent"
+# ty is the only type checker. mypy was dropped because its pre-commit hook ran in an
+# isolated venv that could not resolve this package, so it reported success on code it
+# never checked; see #406.
+# https://docs.astral.sh/ty/reference/configuration
+# https://docs.astral.sh/ty/reference/rules
+# Based on: https://docs.astral.sh/ty/coming-from-mypy-or-pyright/#stricter-checking-with-ty
+[tool.ty.rules]
+blanket-ignore-comment = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsupported-dynamic-base = "warn"
 
-# from https://blog.wolt.com/engineering/2021/09/30/professional-grade-mypy-configuration/
-# no_implicit_reexport = true
-# no_implicit_optional = true
-# check_untyped_defs = true
-# show_error_codes = true
+# `error-on-warning` has been ty's default since 0.0.52, so warn-level rules gate too.
+# These two are stated as errors so they keep gating if that 0.0.x default flips back.
+pydantic-discarded-extra-argument = "error"
+redundant-cast = "error"
 
-# disallow_untyped_defs = true
-# disallow_incomplete_defs = true
-# disallow_any_generics = true
-# disallow_untyped_decorators = true
-# disallow_any_unimported = true
+# NOTE: the following rules are known to have a significant number of false positives,
+# which is mostly unavoidable. Enable them at your own risk!
+division-by-zero = "warn"
+possibly-missing-attribute = "warn"
+possibly-missing-import = "warn"
 
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
-warn_required_dynamic_aliases = false
-warn_untyped_fields = true
+[tool.ty.analysis]
+strict-literal-narrowing = true
