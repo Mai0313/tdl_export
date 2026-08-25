@@ -129,18 +129,15 @@ def download_media(group_id: str, from_file: bool = True) -> None:
     # Filter out already downloaded items
     undownloaded_messages = [msg for msg in combined_chat_data.messages if not msg.downloaded]
 
-    if not undownloaded_messages:
-        console.rule("[bold cyan]No New Media to Download")
-    elif from_file:
-        # Save a temp chat data specifically for un-downloaded files
+    if from_file:
         undownloaded_chat_data = ChatData(id=combined_chat_data.id, messages=undownloaded_messages)
         save_chat_data(path=temp_chat_path, chat_data=undownloaded_chat_data)
 
         console.rule("[bold cyan]Start Downloading Media From File")
         download_command = ["tdl", "dl", "-f", str(temp_chat_path), "-d", str(download_path)]
         subprocess.run(download_command, check=True)  # noqa: S603
-
         temp_chat_path.unlink(missing_ok=True)
+
     else:
         console.rule("[bold cyan]Start Downloading Media From Link")
         for message in undownloaded_messages:
@@ -152,17 +149,16 @@ def download_media(group_id: str, from_file: bool = True) -> None:
             download_command = ["tdl", "dl", "-u", target_url, "-d", str(download_path)]
             subprocess.run(download_command, check=True)  # noqa: S603
 
-    # Re-check files after download to update the final download statuses
-    final_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
-    save_chat_data(path=original_chat_path, chat_data=final_chat_data)
-
+    result = check_chat_data(path=download_path, chat_data=combined_chat_data)
+    save_chat_data(path=original_chat_path, chat_data=result)
     console.rule("[bold cyan]Final Data Saved")
     console.print(f"[green]Done! Final data saved to {original_chat_path}")
 
 
 def main() -> None:
-    group_id = "3310384808"
-    download_media(group_id=group_id, from_file=True)
+    group_id_list = ["3893137254", "8155177296", "8229333075", "7974286223", "7479079265"]
+    for group_id in group_id_list:
+        download_media(group_id=group_id, from_file=True)
 
 
 if __name__ == "__main__":
