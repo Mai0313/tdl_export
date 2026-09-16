@@ -157,6 +157,7 @@ def download_media(group_id: str, from_file: bool = True) -> None:
 
 def main() -> None:
     group_id_list = [
+        "5727382280",
         "3893137254",
         "8155177296",
         "8229333075",
