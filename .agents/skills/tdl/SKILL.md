@@ -100,20 +100,13 @@ still there.
 
 ## How `tdl_export` puts this together
 
-`src/tdl_export/cli.py` is one pass per chat, and the order is load-bearing:
+`src/tdl_export/cli.py` is one ordered pass per chat, and every step in it exists because of something
+above. **`CLAUDE.md`'s Architecture section is the description of that pass** — read it there rather
+than here, so the two cannot drift apart when the code moves.
 
-1. Load `data/chats/<chat_id>.json`. If no message carries a `size`, the archive predates them and a
-    full export is forced; otherwise export incrementally from `max(id) + 1`.
-2. Merge and save the archive, keyed by message id.
-3. Sweep `*.tmp`, lower-case file extensions, then scan the directory into `{message_id: path}`.
-4. Pending = messages with a `file` that are missing from disk, or present at the wrong size. A
-    wrong-size file is deleted first, so a retry cannot leave two files for one message.
-5. `tdl dl` with the pinned template and `--continue`, then re-scan and report anything still missing
-    or still the wrong size.
-
-`--verify` forces the full export, which is how you refresh every recorded size and re-check a whole
-chat. Read the file before changing the order; each step exists because of a specific tdl behaviour
-above.
+What is worth knowing before you open either: the pass never asks tdl what has been downloaded, it
+reads that off the directory; `--verify` is what forces the full export when the archive itself is
+what needs rebuilding; and the run's result comes from re-scanning the disk afterwards, not from tdl.
 
 ## When a run does nothing
 
