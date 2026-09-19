@@ -67,6 +67,7 @@ authors = [
     { name = "Wei", email = "mai@mai0313.com" },
 ]
 dependencies = [
+    "fire",
     "pydantic",
     "rich>=14.3.3",
 ]

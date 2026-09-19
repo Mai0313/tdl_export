@@ -23,9 +23,9 @@ Other Languages: [English](README.md) | [繁體中文](README.zh-TW.md) | [简�
 
 ## ✨ Highlights
 
-- **Automated Chat Export**: Uses `tdl chat export` to fetch messages and metadata from a specific Telegram group/channel.
-- **Resumable Downloads**: Tracks downloaded files and chat state locally in JSON format (e.g., `./data/<group_id>.json`).
-- **Duplicate Prevention**: Scans the local `./downloads/<group_id>` directory to skip already downloaded media files.
+- **Incremental Chat Export**: Uses `tdl chat export` to fetch only the messages newer than the ones already archived.
+- **Filesystem as the Ledger**: Download state is read back from the file names under `./data/downloads/<chat_id>/`, so deleting `./data/chats/` never costs you a re-download.
+- **Size Verification**: Every local file is measured against the byte size Telegram reports. Truncated files — which `tdl` can leave behind under their final name — are removed and fetched again.
 - **Batch Media Download**: Automatically downloads all new media files using `tdl dl` with high concurrency.
 
 ## 🚀 Quick Start
@@ -50,18 +50,26 @@ Other Languages: [English](README.md) | [繁體中文](README.zh-TW.md) | [简�
 
 ### Usage
 
-You can run the script using `uv`:
+Name the chats you want mirrored:
 
 ```bash
-uv run tdl_export
+uv run tdl_export 5727382280 8801654201
 ```
 
-*(Note: The target Telegram group ID is currently set within the script's `main()` function. Modify `src/tdl_export/cli.py` to change the `group_id` before running.)*
+With no arguments it falls back to the list in `src/tdl_export/cli.py`.
+
+Add `--verify` to re-export the whole chat instead of only what is new, which refreshes the recorded sizes and re-checks every file on disk. It is much slower — `tdl chat export` is rate limited to 2 requests per second — so it is worth running occasionally rather than every time:
+
+```bash
+uv run tdl_export 5727382280 --verify
+```
+
+The first run on a chat archived by an older version does this automatically, because those archives carry no sizes yet.
 
 ## 📁 Directory Structure
 
-- `data/`: Contains JSON files that track the exported chat history and download status for each group.
-- `downloads/`: The destination folder where all media files are saved, organized by group ID.
+- `data/chats/<chat_id>.json`: The exported message history for one chat, including the byte size of each media file.
+- `data/downloads/<chat_id>/`: The media, named `<chat_id>_<message_id>_<filename>` by `tdl`. That prefix is what the tool reads back to know what it already has.
 
 ## 📄 License
 
