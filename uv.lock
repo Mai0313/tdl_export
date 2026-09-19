@@ -2209,6 +2209,7 @@ name = "tdl-export"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fire" },
     { name = "pydantic" },
     { name = "rich" },
 ]

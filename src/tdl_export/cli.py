@@ -1,26 +1,43 @@
+import re
 import json
+from typing import Any
 from pathlib import Path
+import tempfile
 import subprocess
 
+import fire
 from pydantic import Field, BaseModel
+from rich.markup import escape
 from rich.console import Console
 
 console = Console()
 
+CHAT_DIR = Path("./data/chats")
+DOWNLOAD_DIR = Path("./data/downloads")
 
-class FileInfo(BaseModel):
-    group_id: int
-    message_id: int
-    message_filename: str
+# tdl's own default, pinned here: a TDL_TEMPLATE environment variable silently replaces it
+# when the flag is absent, and these names are the only record of what has been downloaded.
+NAME_TEMPLATE = "{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}"
+
+DEFAULT_CHAT_IDS = [
+    "5727382280",
+    "3893137254",
+    "8155177296",
+    "8229333075",
+    "7974286223",
+    "7479079265",
+    "8801654201",
+    # "1602149932",
+]
 
 
 class Message(BaseModel):
     id: int = Field(..., description="The Message ID")
-    type: str = Field(..., description="The type of the message")
+    type: str = Field(default="message", description="The type of the message")
     file: str = Field(default="", description="This is the file name")
-    date: int
+    size: int | None = Field(default=None, description="Byte size Telegram reports for the media")
+    date: int | None = Field(default=None)
     text: str | None = Field(default=None)
-    downloaded: bool = Field(default=False, description="Whether the file is downloaded or not")
 
 
 class ChatData(BaseModel):
@@ -37,137 +54,219 @@ def load_chat_data(path: Path) -> ChatData:
     return ChatData(**content_dict)
 
 
-def save_chat_data(path: Path, chat_data: ChatData) -> ChatData:
-    chat_data_json = chat_data.model_dump_json(indent=2, ensure_ascii=False)
-    path.write_text(chat_data_json, encoding="utf-8")
-    return chat_data
+def save_chat_data(path: Path, chat_data: ChatData) -> None:
+    path.parent.mkdir(exist_ok=True, parents=True)
+    # Staged, because a half-written archive costs a full rate-limited re-export to rebuild.
+    staging = path.with_name(f"{path.name}.tmp")
+    staging.write_text(chat_data.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8")
+    staging.replace(path)
 
 
 def merge_chat_data(original: ChatData, new: ChatData) -> ChatData:
-    # Build a lookup map from original data keyed by (id, date)
-    original_map: dict[tuple[int, int], Message] = {
-        (msg.id, msg.date): msg for msg in original.messages
-    }
-
-    merged_map: dict[tuple[int, int], Message] = dict(original_map)
-
-    for msg in new.messages:
-        key = (msg.id, msg.date)
-        if key not in merged_map:
-            merged_map[key] = msg
-
-    sorted_messages = sorted(merged_map.values(), key=lambda m: m.id, reverse=True)
-
+    merged: dict[int, Message] = {message.id: message for message in original.messages}
+    merged.update({message.id: message for message in new.messages})
+    sorted_messages = sorted(merged.values(), key=lambda message: message.id, reverse=True)
     return ChatData(id=new.id, messages=sorted_messages)
 
 
-def get_all_current_file(path: Path) -> list[FileInfo]:
-    if not path.exists():
-        return []
+def get_media_size(raw: dict[str, Any]) -> int | None:
+    """Pull the byte size out of a `--raw` message, the way tdl derives it."""
+    media = raw.get("Media") or {}
+    document = media.get("Document")
+    if isinstance(document, dict):
+        return document.get("Size")
 
-    all_files = [f for f in path.glob("**/*") if f.is_file()]
-    file_info: list[FileInfo] = []
-    for f in all_files:
-        # 使用 maxsplit=2 確保我們只以最前面的兩個底線來切分，避免檔名中也含有底線而導致錯誤
-        parts = f.name.split("_", maxsplit=2)
-        if len(parts) == 3:
-            file_data = FileInfo(
-                group_id=int(parts[0]),  # 3310384808
-                message_id=int(parts[1]),  # 37
-                message_filename=parts[2],  # 6170222615722053134.jpg
-            )
-            file_info.append(file_data)
-    return file_info
-
-
-def check_chat_data(path: Path, chat_data: ChatData) -> ChatData:
-    current_files = get_all_current_file(path=path)
-    downloaded_msg_ids = {f.message_id for f in current_files}
-
-    for message in chat_data.messages:
-        # 檢查該 message 是否已經在我們本地的資料夾中
-        if message.id in downloaded_msg_ids:
-            message.downloaded = True
-    return chat_data
+    photo = media.get("Photo")
+    if not isinstance(photo, dict) or not photo.get("Sizes"):
+        return None
+    # tdl downloads the last size; a progressive one carries its own list of byte counts.
+    largest = photo["Sizes"][-1]
+    progressive = largest.get("Sizes")
+    if isinstance(progressive, list) and progressive:
+        return progressive[-1]
+    return largest.get("Size")
 
 
-def download_media(group_id: str, from_file: bool = True) -> None:
-    original_chat_path = Path(f"./data/{group_id}.json")
-    new_chat_path = Path(f"./data/{group_id}_new.temp")
-    temp_chat_path = Path(f"./data/{group_id}_undownloaded.temp")
-    download_path = Path(f"./downloads/{group_id}")
-
-    original_chat_path.parent.mkdir(exist_ok=True, parents=True)
-
-    original_chat_data = load_chat_data(path=original_chat_path)
-    console.rule("[bold cyan]Original Chat Data Loaded")
-
+def export_chat(chat_id: str, output: Path, since: int | None) -> ChatData:
     export_command = [
         "tdl",
         "chat",
         "export",
         "--chat",
-        str(group_id),
+        chat_id,
         "--all",
         "--with-content",
+        "--raw",
+        "--type",
+        "id",
         "--output",
-        new_chat_path.as_posix(),
+        output.as_posix(),
     ]
+    # A single --input is expanded to [since, MaxInt], so this exports only what is newer.
+    if since is not None:
+        export_command += ["--input", str(since)]
     subprocess.run(export_command, check=True)  # noqa: S603
 
-    new_chat_data = load_chat_data(path=new_chat_path)
-    new_chat_path.unlink(missing_ok=True)
-    console.rule("[bold cyan]New Chat Data Loaded")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    messages = [
+        Message(
+            id=entry["id"],
+            type=entry["type"],
+            file=entry.get("file", ""),
+            size=get_media_size(raw=entry.get("raw") or {}),
+            date=entry.get("date"),
+            text=entry.get("text"),
+        )
+        for entry in payload["messages"]
+    ]
+    return ChatData(id=payload["id"], messages=messages)
 
-    combined_chat_data = merge_chat_data(original=original_chat_data, new=new_chat_data)
-    console.rule("[bold cyan]Chat Data Merged")
 
-    # Check local files and mark as downloaded
-    combined_chat_data = check_chat_data(path=download_path, chat_data=combined_chat_data)
-    console.rule("[bold cyan]Checked Existing Local Files")
+def sweep_temp_files(path: Path) -> None:
+    """Drop tdl's leftovers; it truncates a `.tmp` on the next attempt rather than resuming it."""
+    for leftover in path.glob("*.tmp"):
+        size = leftover.stat().st_size
+        console.print(f"[yellow]Removing stale temp file: {escape(str(leftover))} ({size} bytes)")
+        leftover.unlink()
 
-    # Filter out already downloaded items
-    undownloaded_messages = [msg for msg in combined_chat_data.messages if not msg.downloaded]
 
-    if from_file:
-        undownloaded_chat_data = ChatData(id=combined_chat_data.id, messages=undownloaded_messages)
-        save_chat_data(path=temp_chat_path, chat_data=undownloaded_chat_data)
+def lowercase_extensions(path: Path) -> None:
+    entries = sorted(path.iterdir())
+    names = {entry.name for entry in entries}
+    for entry in entries:
+        if not entry.is_file() or entry.suffix == entry.suffix.lower():
+            continue
+        target = entry.with_suffix(entry.suffix.lower())
+        if target.name in names:
+            console.print(
+                f"[yellow]Kept {escape(entry.name)}; {escape(target.name)} already exists"
+            )
+            continue
+        entry.rename(target)
+        names.add(target.name)
 
-        console.rule("[bold cyan]Start Downloading Media From File")
-        download_command = ["tdl", "dl", "-f", str(temp_chat_path), "-d", str(download_path)]
-        subprocess.run(download_command, check=True)  # noqa: S603
-        temp_chat_path.unlink(missing_ok=True)
 
-    else:
-        console.rule("[bold cyan]Start Downloading Media From Link")
-        for message in undownloaded_messages:
-            if not message.file:
-                continue
+def get_all_current_file(path: Path, chat_id: str) -> dict[int, Path]:
+    """Map message id to the file tdl wrote for it, by reading the `--template` prefix back."""
+    pattern = re.compile(rf"^{re.escape(chat_id)}_(\d+)_")
+    current: dict[int, Path] = {}
+    for entry in path.iterdir():
+        if not entry.is_file() or entry.suffix == ".tmp":
+            continue
+        matched = pattern.match(entry.name)
+        if matched:
+            current[int(matched.group(1))] = entry
+    return current
 
-            target_url = f"https://t.me/c/{group_id}/{message.id}"
-            console.print(f"[cyan]Downloading: {target_url}  ({message.file})")
-            download_command = ["tdl", "dl", "-u", target_url, "-d", str(download_path)]
-            subprocess.run(download_command, check=True)  # noqa: S603
 
-    result = check_chat_data(path=download_path, chat_data=combined_chat_data)
-    save_chat_data(path=original_chat_path, chat_data=result)
-    console.rule("[bold cyan]Final Data Saved")
-    console.print(f"[green]Done! Final data saved to {original_chat_path}")
+def get_pending_messages(chat_data: ChatData, current: dict[int, Path]) -> list[Message]:
+    pending: list[Message] = []
+    for message in chat_data.messages:
+        if not message.file:
+            continue
+        local = current.get(message.id)
+        if local is None:
+            pending.append(message)
+            continue
+        # tdl swallows a failed transfer and renames the partial file to its final name,
+        # so a file that is present still has to be measured.
+        actual = local.stat().st_size
+        if message.size is not None and actual != message.size:
+            path = escape(str(local))
+            console.print(
+                f"[yellow]Incomplete, removing: {path} ({actual} of {message.size} bytes)"
+            )
+            local.unlink()
+            pending.append(message)
+    return pending
+
+
+def download_media_files(
+    pending: list[Message], chat_id: str, download_path: Path, request_path: Path
+) -> None:
+    request = ChatData(
+        id=int(chat_id),
+        messages=[Message(id=message.id, file=message.file) for message in pending],
+    )
+    request_path.write_text(
+        request.model_dump_json(indent=2, ensure_ascii=False, exclude_none=True), encoding="utf-8"
+    )
+    download_command = [
+        "tdl",
+        "dl",
+        "--file",
+        request_path.as_posix(),
+        "--dir",
+        download_path.as_posix(),
+        "--template",
+        NAME_TEMPLATE,
+        # Without this tdl puts an interactive prompt on stdin whenever resume state is left over.
+        "--continue",
+    ]
+    subprocess.run(download_command, check=True)  # noqa: S603
+
+
+def report_incomplete(pending: list[Message], chat_id: str, download_path: Path) -> None:
+    """The directory is the only honest answer, since tdl exits 0 even when files failed."""
+    current = get_all_current_file(path=download_path, chat_id=chat_id)
+    failed = [
+        message.id
+        for message in pending
+        if message.id not in current
+        or (message.size is not None and current[message.id].stat().st_size != message.size)
+    ]
+    if not failed:
+        return
+    shown = ", ".join(str(message_id) for message_id in failed[:20])
+    more = f" ... and {len(failed) - 20} more" if len(failed) > 20 else ""
+    console.print(f"[red]{len(failed)} message(s) still missing or incomplete: {shown}{more}")
+
+
+def download_media(chat_id: str, verify: bool = False) -> None:
+    chat_id = str(chat_id)
+    chat_path = CHAT_DIR / f"{chat_id}.json"
+    download_path = DOWNLOAD_DIR / chat_id
+    download_path.mkdir(exist_ok=True, parents=True)
+
+    chat_data = load_chat_data(path=chat_path)
+    # An archive holding no sizes at all predates them, and cannot be checked until it is rebuilt.
+    full = verify or not any(message.size is not None for message in chat_data.messages)
+    since = None if full else max(message.id for message in chat_data.messages) + 1
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        scope = "everything" if since is None else f"messages after {since - 1}"
+        console.rule(f"[bold cyan]{chat_id}: exporting {scope}")
+        exported = export_chat(chat_id=chat_id, output=temp_path / "export.json", since=since)
+        chat_data = merge_chat_data(original=chat_data, new=exported)
+        save_chat_data(path=chat_path, chat_data=chat_data)
+
+        sweep_temp_files(path=download_path)
+        lowercase_extensions(path=download_path)
+        current = get_all_current_file(path=download_path, chat_id=chat_id)
+        pending = get_pending_messages(chat_data=chat_data, current=current)
+        console.rule(f"[bold cyan]{chat_id}: {len(current)} on disk, {len(pending)} to download")
+
+        if pending:
+            download_media_files(
+                pending=pending,
+                chat_id=chat_id,
+                download_path=download_path,
+                request_path=temp_path / "download.json",
+            )
+            lowercase_extensions(path=download_path)
+            report_incomplete(pending=pending, chat_id=chat_id, download_path=download_path)
+
+    console.print(f"[green]Done! {chat_id} data saved to {chat_path}")
+
+
+def run(*chat_ids: str, verify: bool = False) -> None:
+    for chat_id in [str(chat_id) for chat_id in chat_ids] or DEFAULT_CHAT_IDS:
+        download_media(chat_id=chat_id, verify=verify)
 
 
 def main() -> None:
-    group_id_list = [
-        "5727382280",
-        "3893137254",
-        "8155177296",
-        "8229333075",
-        "7974286223",
-        "7479079265",
-        "8801654201",
-        # "1602149932",
-    ]
-    for group_id in group_id_list:
-        download_media(group_id=group_id, from_file=True)
+    fire.Fire(run)
 
 
 if __name__ == "__main__":
