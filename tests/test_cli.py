@@ -202,6 +202,34 @@ class TestRun:
             cli.run(CHAT)
         assert path.read_bytes() == before
 
+    def test_newest_media_download_first(self, fake_tdl: FakeTdl) -> None:
+        fake_tdl.add(CHAT, 1, "a.jpg", 4)
+        cli.run(CHAT)
+        (download,) = downloads(fake_tdl)
+        assert "--desc" in download
+
+    def test_a_stalled_download_is_stopped_and_the_next_chat_still_runs(
+        self, fake_tdl: FakeTdl, isolated_data: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        fake_tdl.add(CHAT, 1, "a.jpg", 4)
+        fake_tdl.add(OTHER, 7, "b.jpg", 5)
+        fake_tdl.download_waits[CHAT] = -1
+
+        with pytest.raises(SystemExit) as exited:
+            cli.run(CHAT, OTHER)
+
+        assert exited.value.code == 1
+        assert fake_tdl.processes[CHAT].terminated
+        assert not fake_tdl.processes[OTHER].terminated
+        assert (isolated_data / "downloads" / str(OTHER) / f"{OTHER}_7_b.jpg").exists()
+        assert f"{CHAT}: nothing arrived for 5 minutes" in capsys.readouterr().out
+
+    def test_slow_progress_is_not_a_stall(self, fake_tdl: FakeTdl) -> None:
+        fake_tdl.add(CHAT, 1, "a.jpg", 4)
+        fake_tdl.download_waits[CHAT] = 3
+        cli.run(CHAT)
+        assert not fake_tdl.processes[CHAT].terminated
+
     @pytest.mark.parametrize(("limit", "threads"), [(0, 4), (4, 0), (-1, 4)])
     def test_concurrency_below_one_is_refused(
         self, fake_tdl: FakeTdl, limit: int, threads: int

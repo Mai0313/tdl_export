@@ -1,6 +1,8 @@
+import os
 import json
 from typing import Any
 from pathlib import Path
+import contextlib
 import subprocess
 
 from tdl_export.archive import Message, ChatData
@@ -12,6 +14,9 @@ NAME_TEMPLATE = "{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}"
 # slower than 8; small files ignore both, as tdl looks messages up one at a time.
 LIMIT = 4
 THREADS = 4
+# Seconds a download may go without writing a byte before tdl is stopped. Telegram answers some
+# files with a short flood wait on every request, and tdl retries those forever.
+STALL = 300
 
 
 def get_media_size(raw: dict[str, Any]) -> int | None:
@@ -96,5 +101,47 @@ def download(pending: ChatData, directory: Path, request: Path, limit: int, thre
         # Never reads tdl's own resume state, which is keyed on the exact message list and marks a
         # truncated transfer as finished; the pending list is rebuilt from disk every run anyway.
         "--restart",
+        # Newest first, so what arrived since the last run is not queued behind media that earlier
+        # runs could not fetch.
+        "--desc",
     ]
-    subprocess.run(download_command, check=True)  # noqa: S603
+    with subprocess.Popen(download_command) as process:  # noqa: S603
+        try:
+            returncode = wait_while_active(process=process, directory=directory)
+        except KeyboardInterrupt:
+            # tdl got the same Ctrl+C: let it delete its .tmp files and release its database.
+            process.wait()
+            raise
+        except BaseException:
+            # A stall included; the .tmp files a kill leaves are swept at the start of the next run.
+            process.kill()
+            process.wait()
+            raise
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, download_command)
+
+
+def wait_while_active(process: subprocess.Popen[bytes], directory: Path) -> int:
+    """Wait for `process` to exit, raising `TimeoutExpired` once `directory` stays unchanged for `STALL`."""
+    seen = activity(directory)
+    while True:
+        try:
+            return process.wait(timeout=STALL)
+        except subprocess.TimeoutExpired:
+            current = activity(directory)
+            if current == seen:
+                raise
+            seen = current
+
+
+def activity(directory: Path) -> tuple[int, int]:
+    """The number of entries in `directory` and the bytes tdl has written to its `.tmp` files so far."""
+    count = written = 0
+    for entry in os.scandir(directory):
+        count += 1
+        if entry.name.endswith(".tmp"):
+            # tdl renames a finished .tmp at any moment, so it can be gone by the time it is read.
+            with contextlib.suppress(FileNotFoundError):
+                # Not entry.stat(): on Windows the listing's size lags a file that is still open.
+                written += os.stat(entry.path).st_size
+    return count, written
