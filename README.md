@@ -26,13 +26,14 @@ Other Languages: [English](README.md) | [繁體中文](README.zh-TW.md) | [简�
 - **Incremental Chat Export**: Uses `tdl chat export` to fetch only the messages newer than the ones already archived.
 - **Filesystem as the Ledger**: Download state is read back from the file names under `./data/downloads/<chat_id>/`, so deleting `./data/chats/` never costs you a re-download.
 - **Size Verification**: Every local file is measured against the byte size Telegram reports. Truncated files — which `tdl` can leave behind under their final name — are removed and fetched again.
-- **Batch Media Download**: Automatically downloads all new media files using `tdl dl` with high concurrency.
+- **Concurrent Downloads**: Every chat is exported first, then each chat's missing files are fetched several at a time, in a `tdl dl` of its own so one chat's trouble never holds up the others.
+- **Stop and Restart Anytime**: Each run works out what is missing from the folders, so a run stopped halfway, or picked up days later, fetches only what is not there in full. A file that was mid-transfer starts over from its first byte.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **Python 3.11+** installed.
+1. **Python 3.12+** installed.
 2. **uv** package manager installed.
 3. **tdl CLI** installed and logged into your Telegram account.
 
@@ -65,6 +66,14 @@ uv run tdl_export 5727382280 --verify
 ```
 
 The first run on a chat archived by an older version does this automatically, because those archives carry no sizes yet.
+
+`--limit` sets how many files download at once (default 4) and `--threads` how many parts of one large file (default 4). The defaults were measured: higher values ran no faster, because Telegram capped the measured account at about 12 MB/s on a line that does three times that, and photos and other small files stay near one per second whatever the setting:
+
+```bash
+uv run tdl_export --limit 8
+```
+
+Press Ctrl+C to stop. Finished files stay, and the next run continues from there.
 
 ## 📁 Directory Structure
 

@@ -45,8 +45,9 @@ instead of reaching Telegram.
 uv sync --all-groups                  # ruff, pytest and the docs tooling live in non-default groups
 uv run tdl_export <chat_id> ...       # mirror those chats; no arguments falls back to the list in cli.py
 uv run tdl_export <chat_id> --verify  # full re-export: refresh every recorded size, re-check every file
+uv run tdl_export --limit 8           # more files at once than the measured default
 make test                             # pytest, with the coverage gate from pyproject.toml
-make fmt                              # pre-commit: ruff, mdformat, codespell, ty, gitleaks, uv-lock
+make fmt                              # every pre-commit hook, the same set CI runs
 make gen-docs                         # rebuild docs/ from the READMEs, src/ and scripts/
 ```
 
@@ -59,26 +60,34 @@ rest of the "the run did nothing and said nothing" cases.
 One module per concept under `src/tdl_export/`: `archive.py` is the chat archive and its models,
 `tdl.py` is everything that encodes tdl's command line and output formats, `ledger.py` is the
 download folder read as the record of what arrived, and `cli.py` runs the pass. `fire` exposes
-`run()`, which loops over chat ids and calls `download_media` once per chat. That function is one
-ordered pass, and the order is the design rather than an implementation detail:
+`run()`. A run is one ordered pass over every chat, and the order is the design rather than an
+implementation detail:
 
-1. **Load the archive and decide the export scope.** An archive where no message carries a `size`
-    predates them, so a full export is forced; otherwise the export is incremental from `max(id) + 1`.
-    This is what lets an archive written by an older version repair itself without anyone knowing to
-    pass `--verify`.
-2. **Export, merge, save.** `--raw` is there only to reach the media's byte size, which the plain
-    export does not carry; the blob is dropped as soon as the size is read. `--all` keeps the messages
-    with no downloadable media and `--with-content` fills in their dates and text; together they are
-    why the archive is a chat history rather than a download list, and neither costs extra API calls.
-    Merging is keyed on message id, newest wins.
-3. **Reconcile with the disk.** Sweep `*.tmp`, lower-case file extensions, then read the directory
-    back into `{message_id: path}` off the filename prefix.
-4. **Work out what is pending.** A message with a `file` that is missing from disk, or present at the
-    wrong size. A wrong-size file is deleted *before* the download rather than overwritten, so a retry
-    cannot leave two files for one message under different extension casings.
-5. **Download, then check again.** tdl's exit code says nothing about whether the files arrived, so
-    re-scanning and reporting what is still missing or still the wrong size is the only honest result
-    a run can give.
+1. **Per chat, bring the archive up to date.** An archive where no message carries a `size` predates
+    them, so a full export is forced; otherwise the export is incremental from `max(id) + 1`. This is
+    what lets an archive written by an older version repair itself without anyone knowing to pass
+    `--verify`. `--all` and `--with-content` make the archive a chat history rather than a download
+    list, and `--raw` is there only for the byte size. Merging is keyed on message id, newest wins. A
+    chat whose export fails is skipped, and the run's exit code says so at the end.
+2. **Per chat, reconcile with the disk.** Sweep `*.tmp`, lower-case file extensions, read the folder
+    back into `{message_id: path}` off the filename prefix, and list what is pending: a message with a
+    `file` that is missing, or present at the wrong size. A wrong-size file is deleted *before* the
+    download rather than overwritten, so a retry cannot leave two files for one message under
+    different extension casings.
+3. **One `tdl dl` per chat with something pending, in turn.** One process for every chat would share
+    its download slots, but one message tdl cannot resolve then stops every chat after it, on every
+    run; the skill's "One tdl process at a time" has the mechanics. The speed comes from `--limit`
+    inside each process.
+4. **Measure again.** tdl's exit code says nothing about whether the files arrived, so the per-chat
+    table of what is still missing or the wrong size is the only honest result a run can give. The
+    run exits 1 only when a tdl process failed; a file still missing is reported, not failed, since
+    some never come back (media its sender deleted).
+
+**Stopping halfway and starting again is the normal case, not a recovery path.** Every run rebuilds
+its pending list from the folders, so a run stopped at any point, or picked up days later, fetches
+exactly the files that are not there in full. The archive is saved before anything downloads, a
+leftover `.tmp` is swept, and tdl's own resume state is never read. A single file cannot be resumed:
+tdl restarts an interrupted transfer from byte zero.
 
 The archive is written through a staging file and `Path.replace`, because it holds the only copy of
 the recorded sizes and rebuilding it costs a full rate-limited export.
@@ -94,9 +103,12 @@ the recorded sizes and rebuilding it costs a full rate-limited export.
     top-level value until it reaches `id`, so putting `messages` first decodes the whole array for
     nothing. Correctness is a separate matter and comes from `id` being typed `int`: tdl's assertion on
     that value is unchecked, and a string there panics rather than erroring.
-- **`--template` is pinned in the code even though it matches tdl's default**, because the rendered
-    filename is what the ledger is read back out of, and an environment variable can move that default
-    under you.
+- **`--template`, `--limit` and `--threads` are always passed explicitly.** tdl reads a
+    `TDL_<FLAG>` environment variable for each of them when it is left out, and the rendered filename
+    is what the ledger is read back out of, even where it matches tdl's default.
+- **The concurrency defaults come from a measurement, not from the machine.** tdl's throughput is
+    bound by the network and by Telegram, never by CPU count; the skill has the numbers. Change
+    `LIMIT` or `THREADS` only with a new measurement.
 - **Read the `<chat_id>_<message_id>_` prefix and nothing else.** tdl rewrites and truncates the rest
     of the name; the skill has the specifics and the version they were measured against.
 - **A change that outdates the `tdl` skill updates that skill in the same PR.** It is read into every

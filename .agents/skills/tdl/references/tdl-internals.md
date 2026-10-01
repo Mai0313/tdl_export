@@ -12,6 +12,9 @@ again. Anything marked *measured* was confirmed by running the binary against a 
 - [The `-f` input parser](#the--f-input-parser)
 - [chat export](#chat-export)
 - [Cost and rate limits](#cost-and-rate-limits)
+- [Process lock](#process-lock)
+- [Several `-f` files](#several--f-files)
+- [Interrupts](#interrupts)
 
 ## Failure handling
 
@@ -90,8 +93,14 @@ prompt on stdin.
 The resume record is a bolt key `resume:<sha256>` whose fingerprint covers the exact sorted
 `(peer, message ids)` set, holding **logical positions**, not message ids. Adding or removing a single
 id invalidates it, and it is deleted on a successful run. It is not a download archive and cannot be
-used as one. `--desc` changes every position without changing the fingerprint, which invalidates it
-silently.
+used as one. `--desc` reorders the messages before the fingerprint is taken (`sortDialogs` at
+`app/dl/iter.go:95`), so it yields a different fingerprint rather than misreading an old one.
+
+The finished check runs after the message has been fetched (`app/dl/iter.go:177` precedes `:198`), so
+a resumed run still spends one `getHistory` per finished message; it saves transfers only. And a
+transfer that failed silently is marked finished too (`p.it.Finish` at `app/dl/progress.go:78` runs on
+the swallowed-error path), so `--continue` with an unchanged list skips a truncated file. `--restart`
+never loads the key.
 
 ## --skip-same
 
@@ -299,10 +308,66 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 
 One round trip per id, serially, before any skip logic runs.
 
-`-l/--limit` is concurrent files (default 2); `-t/--threads` is threads per file (default 4), capped
-downward by size. FLOOD_WAIT is absorbed by gotd's waiter with no cap and no message, so a silent
-process is usually waiting rather than stuck. `-s/--size` has been a no-op since v0.18.1.
+`-l/--limit` is concurrent files (default 2, `cmd/root.go:163`), fed straight into
+`errgroup.SetLimit` (`core/downloader/downloader.go:37-38`); 0 hangs and a negative value is unlimited.
+`-t/--threads` is parts in flight per file (default 4), capped by size in `tutil.BestThreads`
+(`core/util/tutil/tutil.go:257-275`: 1 under 1 MiB, 2 under 5 MiB, 4 under 20 MiB, 8 under 50 MiB);
+each part is one 1 MiB `upload.getFile`. `--pool` (default 8, 0 = unlimited) caps connections per DC,
+and gotd hands each connection to one request at a time (`pool/pool.go:155-265` in gotd/td), so
+`limit x threads` above the pool just queues. `-s/--size` has been a no-op since v0.18.1.
+
+The download loop is serial where it matters: `Download` calls `Iter.Next`, which takes the iterator
+mutex and runs `GetSingleMessage` under it (`app/dl/iter.go:151-177`) before `wg.Go` can start the next
+transfer. Finishing transfers take the same mutex in `iter.Finish` (`app/dl/iter.go:346`), so a slow or
+flood-waited lookup also holds back every download that completes meanwhile. Every file whose last
+part is under 1 MiB sleeps 200 ms in its slot for the progress bar (`core/downloader/progress.go:49-50`).
+Unlike `chat export`, `dl` adds no rate limiter of its own (`cmd/dl.go:32-34`).
+
+FLOOD_WAIT and FLOOD_PREMIUM_WAIT are absorbed by gotd/contrib's `SimpleWaiter`
+(`core/tclient/tclient.go:90-96`), which sleeps the given seconds and retries with no cap and no log
+line, so a silent process is usually waiting rather than stuck. gotd logs the error at DEBUG only.
+
+`--takeout` wraps only `upload.getFile` (`core/downloader/downloader.go:83-86`); the lookups still go
+through `pool.Default`. When Telegram answers `account.initTakeoutSession` with
+`TAKEOUT_INIT_DELAY_X`, `pool.Takeout` calls `p.Client` while holding `p.mu`
+(`core/dcpool/dcpool.go:113-123` and `:57-58`), and the run deadlocks.
 
 A numeric chat id resolves through `tutil.GetInputPeer` → `manager.ResolveChannelID`, which needs the
 access hash from the local peer store at `~/.tdl/data`. On a fresh session that store is empty and the
 id alone will not resolve; `tdl chat ls` populates it. Usernames do not have this problem.
+
+## Process lock
+
+Every Telegram command opens `~/.tdl/data/<ns>` with `bbolt.Open` (`pkg/kv/bolt.go:147`) and a 1 s
+lock timeout (`pkg/kv/legacy.go:16-17`), and closes it only in `PersistentPostRunE`
+(`cmd/root.go:115-119`). `main.go:21` maps the timeout to "Current database is used by another process,
+please terminate it first", printed with `color.Red` to stdout, exit 1. *Measured*: a second
+`tdl chat ls` started 0.31 s after the first failed at 1.78 s with that message.
+
+## Several `-f` files
+
+`--file` is a pflag string slice (`cmd/dl.go:48`), so it repeats, and a comma inside one path splits it.
+Each file becomes its own dialog with its own peer resolved while parsing
+(`pkg/tmessage/files.go:42-46`), and `dl.Run` returns before downloading anything if any of them fails
+(`app/dl/dl.go:65-68`). Dialogs are sorted by peer id and messages by id
+(`app/dl/iter.go:391-405`). The walk ends when the current dialog has no message left
+(`app/dl/iter.go:155-156`), which a dialog with none at all satisfies immediately, so the run returns
+nil there. A lookup error other than `ErrMessageDeleted` sets the iterator error and stops the run
+(`:190-191`); `GetSingleMessage` returns `invalid message %d` when the next-older history entry is not a
+`*tg.Message` (`core/util/tutil/tutil.go:186-189`), which is what a deleted message followed by a
+service message yields. The rendered name goes through `filepath.Join` and `os.MkdirAll`
+(`app/dl/iter.go:253-260`), so a template with a `/` creates the folder, with `\` on Windows.
+
+## Interrupts
+
+`main.go:17` wraps the run in `signal.NotifyContext(..., os.Interrupt)`; Go delivers CTRL_C_EVENT and
+CTRL_BREAK_EVENT as that, while closing the console window arrives as SIGTERM, which tdl does not
+handle. gotd's `Client.Run` returns nil on `context.Canceled` (`telegram/connect.go:189-193` in
+gotd/td), so an interrupted tdl exits 0. In-flight transfers take the cancel branch quoted under
+"Failure handling" and delete their `.tmp`, but `Download` returns on the iterator's error without
+waiting for its workers (`core/downloader/downloader.go:66-70`), so one can survive.
+
+`chat export` writes its closing brackets in defers (`app/chat/export.go:144-150`) while walking newest
+to oldest, so an interrupted export is valid JSON holding only the newest messages. *Measured* on
+Windows: Python's `subprocess.run` blocks in `WaitForSingleObject` until tdl has exited, and raises
+`KeyboardInterrupt` only then.
