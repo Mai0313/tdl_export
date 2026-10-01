@@ -5,9 +5,13 @@ import subprocess
 
 from tdl_export.archive import Message, ChatData
 
-# tdl's own default, pinned here: a TDL_TEMPLATE environment variable silently replaces it
-# when the flag is absent, and these names are the only record of what has been downloaded.
+# Every value below is always passed explicitly: tdl reads a TDL_<FLAG> environment variable for each
+# of these flags when it is left out, and the rendered names are the only record of what has arrived.
 NAME_TEMPLATE = "{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}"
+# Files at once, and parts per large file. 4 files measured faster than tdl's default of 2 and no
+# slower than 8; small files ignore both, as tdl looks messages up one at a time.
+LIMIT = 4
+THREADS = 4
 
 
 def get_media_size(raw: dict[str, Any]) -> int | None:
@@ -28,13 +32,13 @@ def get_media_size(raw: dict[str, Any]) -> int | None:
     return largest.get("Size")
 
 
-def export_chat(chat_id: str, output: Path, since: int | None) -> ChatData:
+def export_chat(chat_id: int, output: Path, since: int | None) -> ChatData:
     export_command = [
         "tdl",
         "chat",
         "export",
         "--chat",
-        chat_id,
+        str(chat_id),
         "--all",
         "--with-content",
         "--raw",
@@ -63,26 +67,34 @@ def export_chat(chat_id: str, output: Path, since: int | None) -> ChatData:
     return ChatData(id=payload["id"], messages=messages)
 
 
-def download(
-    pending: list[Message], chat_id: str, download_path: Path, request_path: Path
-) -> None:
-    request = ChatData(
-        id=int(chat_id),
-        messages=[Message(id=message.id, file=message.file) for message in pending],
-    )
-    request_path.write_text(
-        request.model_dump_json(indent=2, ensure_ascii=False, exclude_none=True), encoding="utf-8"
+def download(pending: ChatData, directory: Path, request: Path, limit: int, threads: int) -> None:
+    """Fetch the messages of `pending` into `directory`, through the request file `request`.
+
+    One process per chat: tdl stops the whole process at the first message it cannot resolve, and a
+    process of its own keeps that to the chat the message belongs to.
+    """
+    messages = [Message(id=message.id, file=message.file) for message in pending.messages]
+    request.write_text(
+        ChatData(id=pending.id, messages=messages).model_dump_json(
+            indent=2, ensure_ascii=False, exclude_none=True
+        ),
+        encoding="utf-8",
     )
     download_command = [
         "tdl",
         "dl",
         "--file",
-        request_path.as_posix(),
+        request.as_posix(),
         "--dir",
-        download_path.as_posix(),
+        directory.as_posix(),
         "--template",
         NAME_TEMPLATE,
-        # Without this tdl puts an interactive prompt on stdin whenever resume state is left over.
-        "--continue",
+        "--limit",
+        str(limit),
+        "--threads",
+        str(threads),
+        # Never reads tdl's own resume state, which is keyed on the exact message list and marks a
+        # truncated transfer as finished; the pending list is rebuilt from disk every run anyway.
+        "--restart",
     ]
     subprocess.run(download_command, check=True)  # noqa: S603

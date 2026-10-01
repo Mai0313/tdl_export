@@ -35,16 +35,19 @@ def isolated_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class FakeTdl:
-    """Stands in for the tdl binary: serves a chat's history and writes the files it is asked for.
+    """Stands in for the tdl binary: serves each chat's history and writes the files asked for.
 
     `history` maps chat id to its messages as `tdl chat export --all --with-content --raw` emits
-    them. `written_size` decides how many bytes each download writes, so a test can make tdl "succeed"
-    with a truncated file the way the real one does.
+    them. `written_size` decides how many bytes a download writes, so a test can make tdl "succeed"
+    with a truncated file the way the real one does. `failing_exports` and `failing_downloads` make
+    the process for those chats exit non-zero, a download only after writing its files.
     """
 
     def __init__(self) -> None:
         self.history: dict[int, list[dict[str, Any]]] = {}
         self.written_size: dict[int, int] = {}
+        self.failing_exports: set[int] = set()
+        self.failing_downloads: set[int] = set()
         self.calls: list[list[str]] = []
         self.requests: list[str] = []
 
@@ -67,31 +70,45 @@ class FakeTdl:
         return subprocess.CompletedProcess(command, 0)
 
     @staticmethod
-    def _flag(command: list[str], name: str) -> str | None:
+    def flag(command: list[str], name: str) -> str | None:
         return command[command.index(name) + 1] if name in command else None
 
     def _export(self, command: list[str]) -> None:
-        chat_id = int(self._flag(command, "--chat") or "0")
-        since = int(self._flag(command, "--input") or "0")
+        chat_id = int(self.flag(command, "--chat") or "0")
+        if chat_id in self.failing_exports:
+            raise subprocess.CalledProcessError(1, command)
+        since = int(self.flag(command, "--input") or "0")
         messages = sorted(
             (m for m in self.history.get(chat_id, []) if m["id"] >= since),
             key=lambda m: m["id"],
             reverse=True,
         )
-        output = Path(self._flag(command, "--output") or "")
+        output = Path(self.flag(command, "--output") or "")
         output.write_text(json.dumps({"id": chat_id, "messages": messages}), encoding="utf-8")
 
     def _download(self, command: list[str]) -> None:
-        request_text = Path(self._flag(command, "--file") or "").read_text(encoding="utf-8")
+        request_text = Path(self.flag(command, "--file") or "").read_text(encoding="utf-8")
         self.requests.append(request_text)
         request = json.loads(request_text)
-        directory = Path(self._flag(command, "--dir") or "")
-        sizes = {m["id"]: m for m in self.history[request["id"]]}
+        chat_id = request["id"]
+        directory = Path(self.flag(command, "--dir") or "")
+        template = self.flag(command, "--template") or ""
+        sizes = {
+            m["id"]: m["raw"]["Media"]["Document"]["Size"]
+            for m in self.history[chat_id]
+            if m["raw"]
+        }
         for message in request["messages"]:
-            full = sizes[message["id"]]["raw"]["Media"]["Document"]["Size"]
-            written = self.written_size.get(message["id"], full)
-            target = directory / f"{request['id']}_{message['id']}_{message['file']}"
-            target.write_bytes(b"x" * written)
+            written = self.written_size.get(message["id"], sizes[message["id"]])
+            name = (
+                template
+                .replace("{{ .DialogID }}", str(chat_id))
+                .replace("{{ .MessageID }}", str(message["id"]))
+                .replace("{{ filenamify .FileName }}", message["file"])
+            )
+            (directory / name).write_bytes(b"x" * written)
+        if chat_id in self.failing_downloads:
+            raise subprocess.CalledProcessError(1, command)
 
 
 @pytest.fixture

@@ -33,7 +33,7 @@ class TestDisk:
         write(tmp_path / f"{CHAT}_8_partial.mp4.tmp", 1)
         write(tmp_path / f"9{CHAT}_9_other_chat.mp4", 1)
         write(tmp_path / "unrelated.txt", 1)
-        assert ledger.scan(tmp_path, str(CHAT)) == {7: mine}
+        assert ledger.scan(tmp_path, CHAT) == {7: mine}
 
     def test_pending(self, tmp_path: Path) -> None:
         complete = write(tmp_path / f"{CHAT}_1_a", 5)
@@ -55,3 +55,15 @@ class TestDisk:
         assert not truncated.exists(), "a wrong-size file is removed before it is fetched again"
         assert complete.exists()
         assert unsized.exists()
+
+    def test_incomplete_is_missing_or_wrong_size(self, tmp_path: Path) -> None:
+        write(tmp_path / f"{CHAT}_1_a", 5)
+        write(tmp_path / f"{CHAT}_2_b", 3)
+        write(tmp_path / f"{CHAT}_3_c", 9)
+        pending = [
+            Message(id=1, file="a", size=5),
+            Message(id=2, file="b", size=5),
+            Message(id=3, file="c", size=None),
+            Message(id=4, file="d", size=5),
+        ]
+        assert ledger.find_incomplete(pending, tmp_path, CHAT) == [2, 4]

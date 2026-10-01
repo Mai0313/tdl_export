@@ -48,20 +48,25 @@ Parse `^<chat_id>_(\d+)_` and **stop there**. Do not try to reconstruct the orig
 tail: `filenamify` truncates at 100 runes *including* the extension, so a long name can lose it
 entirely, and it maps `<>:"/\|?*` and control characters to `!`. Skip `*.tmp` while scanning.
 
-Pin `--template` explicitly even when you want the default. A `TDL_TEMPLATE` environment variable
-silently replaces it when the flag is absent (viper reads `TDL_`-prefixed variables automatically),
-and the naming contract is the thing you are reading state back out of.
+Pin `--template` explicitly even when you want the default. viper reads a `TDL_<FLAG>` environment
+variable for `--template` and for every global flag (`TDL_LIMIT`, `TDL_THREADS`, `TDL_POOL`, ...)
+left off the command line, and the naming contract is the thing you are reading state back out of. The template may contain a
+directory, so `{{ .DialogID }}/{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}` under one
+`--dir` gives every chat its own folder with the same prefix; Go turns the `/` into `\` on Windows.
 
 ## Flags that decide whether a script works
 
-| Flag                           | Why it matters                                                                                                                                                                                                                    |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--continue` or `--restart`    | **Pass one.** With neither, leftover resume state makes tdl block on an interactive confirm prompt — a hang in a subprocess with no TTY. Resume is per-file-in-the-list, never byte-level, so the two differ less than they look. |
-| `--template`                   | Pin it, per above.                                                                                                                                                                                                                |
-| `--skip-same`                  | `os.Stat` on the exact rendered path plus an exact size match. Useful, but it runs **after** the per-message API call, so it saves bandwidth and no API budget. It is also defeated by any renaming of the file on disk.          |
-| `--rewrite-ext`                | Renames the finished file to a MIME-sniffed extension, which the next run's `--skip-same` then fails to find. The two together re-download forever. Pick one.                                                                     |
-| `--group`                      | Acknowledged-broken upstream, and an export already lists every album member. Leave it off.                                                                                                                                       |
-| `-i/--include`, `-e/--exclude` | Matched against the extension of the **original Telegram filename**, case-sensitively, and mutually exclusive. `-i mp4` does not match `.MP4`. Filter in your own code instead.                                                   |
+| Flag                           | Why it matters                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--restart`                    | **Pass it.** With neither it nor `--continue`, leftover resume state makes tdl block on an interactive confirm prompt — a hang in a subprocess with no TTY. `--continue` reads that state, which is keyed on the exact message list and counts a silently failed transfer as finished, so a rerun with the same list can skip a truncated file. A list rebuilt from disk every run gains nothing from it. |
+| `-l/--limit`, `-t/--threads`   | Files at once (default 2) and parts in flight per file (default 4, but a file uses at most 1 part under 1 MiB, 2 under 5 MiB, 4 under 20 MiB, 8 under 50 MiB). See the measurements below; pass both explicitly.                                                                                                                                                                                          |
+| `--pool`                       | Connections per DC (default 8), one request each. Raising it measured no faster.                                                                                                                                                                                                                                                                                                                          |
+| `--takeout`                    | Wraps only the file transfer, never the per-message lookup that floods, and a `TAKEOUT_INIT_DELAY` answer deadlocks tdl on its own mutex. Leave it off.                                                                                                                                                                                                                                                   |
+| `--template`                   | Pin it, per above.                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--skip-same`                  | `os.Stat` on the exact rendered path plus an exact size match. Useful, but it runs **after** the per-message API call, so it saves bandwidth and no API budget. It is also defeated by any renaming of the file on disk.                                                                                                                                                                                  |
+| `--rewrite-ext`                | Renames the finished file to a MIME-sniffed extension, which the next run's `--skip-same` then fails to find. The two together re-download forever. Pick one.                                                                                                                                                                                                                                             |
+| `--group`                      | Acknowledged-broken upstream, and an export already lists every album member. Leave it off.                                                                                                                                                                                                                                                                                                               |
+| `-i/--include`, `-e/--exclude` | Matched against the extension of the **original Telegram filename**, case-sensitively, and mutually exclusive. `-i mp4` does not match `.MP4`. Filter in your own code instead.                                                                                                                                                                                                                           |
 
 ## What an export gives you, and what it costs
 
@@ -82,6 +87,34 @@ message id** in the file, with no batching. Handing it 11,000 already-downloaded
 trips before `--skip-same` gets a chance to skip anything. Prune the list yourself — that is the only
 thing that saves flood-wait budget.
 
+## What decides download speed
+
+Measured with v0.20.4 against this repo's own chats, each cell the same files fetched again into a
+scratch folder (ranges are repeated runs):
+
+| Files                                  | `-l 2`        | `-l 4`    | `-l 8` | `-l 16` |
+| -------------------------------------- | ------------- | --------- | ------ | ------- |
+| 120 photos and small files, under 1 MB | 1.13 files/s  | 1.00      | 0.97   | 0.98    |
+| 24 videos of 40-120 MB                 | 8.8-11.1 MB/s | 11.5-12.3 | 12.3   | -       |
+
+- **Small files are bound by the lookup, not the transfer.** `tdl dl` fetches every message with its
+    own `messages.getHistory`, one at a time under a lock, and Telegram answered that call with
+    FLOOD_WAIT_18 to FLOOD_WAIT_27 about every 30 requests. No flag changes this; `--limit` only
+    decides how many transfers overlap the lookups.
+- **Nothing moved past `-l 4 -t 4`.** `-t 8`, `-t 16`, `-l 8 -t 8` and `--pool 0` all stayed between
+    10 and 14 MB/s on these videos and on a single 1.3 GB file, while the same machine pulled 34 MB/s
+    from a non-Telegram server. The ceiling is on Telegram's side for this account, and nothing in a
+    `--debug` log says what enforces it.
+- **One DC can stall on its own.** One run of that 1.3 GB file crawled at under 1 MB/s for 23 minutes
+    through hundreds of `Acknowledge timed out` retries on DC 5, then ran at 11-12 MB/s with the same
+    flags. A single slow run says nothing about the flags.
+- **CPU count is irrelevant.** The only CPU work is MTProto decryption, about 1-3 ms per MiB, which
+    gotd already spreads over every core whatever `--limit` says.
+- **Throttling is silent.** tdl sleeps through FLOOD_WAIT and FLOOD_PREMIUM_WAIT with no cap and no
+    INFO-level log. Run with `--debug` and grep `~/.tdl/log/latest.log` (and its rotated `.gz`
+    siblings, since debug output rotates it within minutes) for `"err_msg": "FLOOD_`. No captured run
+    above got a FLOOD_PREMIUM_WAIT.
+
 The `-f` JSON itself is read very narrowly: the top-level `id` (a **bare number**, and the **first**
 key, or you pay for materialising the whole array), and per message `id` plus `type == "message"` plus
 a non-empty `file` or `photo` as a has-media gate. Everything else is ignored, so extra fields are
@@ -98,9 +131,44 @@ Treat it as "this is no longer fetchable" rather than something to retry. `tdl c
 the cases: a chat you left is gone from the list entirely, while a bot that cleaned up its files is
 still there.
 
+## One tdl process at a time
+
+tdl opens `~/.tdl/data/<namespace>`, a bolt database, with an exclusive lock when it starts and holds
+it until it exits. A second tdl on the same namespace waits 1 s, prints "Current database is used by
+another process" **on stdout**, and exits 1. So exports cannot run in parallel, and an export cannot
+overlap a download.
+
+What one process can do instead: `tdl dl` takes `-f` once per chat. Chats are walked one after another
+in ascending id, and each chat's messages in ascending id whatever order the file lists them, but the
+download slots are shared, so one chat's tail overlaps the next chat's head. What one chat does then
+reaches every chat after it:
+
+- every `-f` chat is resolved before anything downloads, and one that fails to resolve stops the run;
+- a `-f` that lists no messages ends the run right there, **exit 0**, so later chats are skipped in
+    silence;
+- any lookup error other than "deleted" stops the run, and a message deleted after it was exported
+    produces one whenever the message just older than it is a service message (`invalid message N`).
+    It is still pending next time, so it stops the run again.
+
+`tdl_export` therefore runs one `tdl dl` per chat with something pending.
+
+## Stopping tdl
+
+- **Ctrl+C** reaches a Python wrapper and tdl alike when they share a console. tdl cancels the
+    transfers in flight, deletes their `.tmp`, and exits **0**. On Windows Python's wait cannot be
+    interrupted, so `KeyboardInterrupt` surfaces only once tdl has finished shutting down; on POSIX
+    `subprocess.run` kills the child 0.25 s after the interrupt.
+- **An interrupted export still writes valid JSON**, holding only the newest messages down to where it
+    stopped. Merging it would move a `max(id)` high-water mark past a range that was never exported,
+    so an export that was interrupted is void whatever its exit code.
+- **A hard kill** (closing the window, Task Manager, SIGKILL) skips all cleanup: `.tmp` files stay and
+    an export is left without its closing brackets.
+- **No transfer resumes mid-file.** The `.tmp` is opened with `O_TRUNC` and gotd always starts at
+    offset 0, so an interrupted file restarts from byte zero whichever flag is passed.
+
 ## How `tdl_export` puts this together
 
-`src/tdl_export/` runs one ordered pass per chat, and every step in it exists because of something
+`src/tdl_export/` runs one ordered pass over every chat, and every step in it exists because of something
 above. **`CLAUDE.md`'s Architecture section is the description of that pass** — read it there rather
 than here, so the two cannot drift apart when the code moves.
 
@@ -119,5 +187,5 @@ Work down this ladder rather than guessing:
 3. **Do the messages still carry media?** Export the specific ids with `-T id -i <n>,<n> --all --raw`
     and look for a `Media` key.
 4. **Is it silent rather than stuck?** A tdl process producing no output for a long time is usually
-    absorbing a FLOOD_WAIT, which it does indefinitely and without saying so. Killing and retrying
-    compounds it.
+    absorbing a FLOOD_WAIT, which it does indefinitely and without saying so; `--debug` shows it.
+    Killing and retrying compounds it.
