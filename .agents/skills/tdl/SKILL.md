@@ -100,7 +100,7 @@ still there.
 
 ## How `tdl_export` puts this together
 
-`src/tdl_export/cli.py` is one ordered pass per chat, and every step in it exists because of something
+`src/tdl_export/` runs one ordered pass per chat, and every step in it exists because of something
 above. **`CLAUDE.md`'s Architecture section is the description of that pass** — read it there rather
 than here, so the two cannot drift apart when the code moves.
 

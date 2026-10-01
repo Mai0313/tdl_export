@@ -56,9 +56,11 @@ rest of the "the run did nothing and said nothing" cases.
 
 ## Architecture
 
-`src/tdl_export/cli.py` is the whole package today. `fire` exposes `run()`, which loops over chat ids
-and calls `download_media` once per chat. That function is one ordered pass, and the order is the
-design rather than an implementation detail:
+One module per concept under `src/tdl_export/`: `archive.py` is the chat archive and its models,
+`tdl.py` is everything that encodes tdl's command line and output formats, `ledger.py` is the
+download folder read as the record of what arrived, and `cli.py` runs the pass. `fire` exposes
+`run()`, which loops over chat ids and calls `download_media` once per chat. That function is one
+ordered pass, and the order is the design rather than an implementation detail:
 
 1. **Load the archive and decide the export scope.** An archive where no message carries a `size`
     predates them, so a full export is forced; otherwise the export is incremental from `max(id) + 1`.
