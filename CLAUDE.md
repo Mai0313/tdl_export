@@ -77,7 +77,9 @@ implementation detail:
 3. **One `tdl dl` per chat with something pending, in turn.** One process for every chat would share
     its download slots, but one message tdl cannot resolve then stops every chat after it, on every
     run; the skill's "One tdl process at a time" has the mechanics. The speed comes from `--limit`
-    inside each process.
+    inside each process. Some files are never served at all, so a process that writes nothing for
+    `STALL` seconds is stopped and the chat reported, and each process fetches newest first so what
+    is new is not queued behind files earlier runs could not fetch.
 4. **Measure again.** tdl's exit code says nothing about whether the files arrived, so the per-chat
     table of what is still missing or the wrong size is the only honest result a run can give. The
     run exits 1 only when a tdl process failed; a file still missing is reported, not failed, since

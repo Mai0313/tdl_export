@@ -110,6 +110,10 @@ def run(
                 )
             except subprocess.CalledProcessError:
                 failed.append(f"{chat_id}: tdl dl stopped early")
+            except subprocess.TimeoutExpired:
+                failed.append(
+                    f"{chat_id}: nothing arrived for {tdl.STALL // 60} minutes, tdl stopped"
+                )
         if pending:
             report(pending=pending)
 

@@ -60,6 +60,7 @@ directory, so `{{ .DialogID }}/{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .F
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--restart`                    | **Pass it.** With neither it nor `--continue`, leftover resume state makes tdl block on an interactive confirm prompt — a hang in a subprocess with no TTY. `--continue` reads that state, which is keyed on the exact message list and counts a silently failed transfer as finished, so a rerun with the same list can skip a truncated file. A list rebuilt from disk every run gains nothing from it. |
 | `-l/--limit`, `-t/--threads`   | Files at once (default 2) and parts in flight per file (default 4, but a file uses at most 1 part under 1 MiB, 2 under 5 MiB, 4 under 20 MiB, 8 under 50 MiB). See the measurements below; pass both explicitly.                                                                                                                                                                                          |
+| `--desc`                       | Newest first. Without it tdl walks each chat in ascending id, so media that never arrive (below) and sit low in the chat take the download slots before anything newer is reached. It moves that cost onto older messages rather than removing it.                                                                                                                                                        |
 | `--pool`                       | Connections per DC (default 8), one request each. Raising it measured no faster.                                                                                                                                                                                                                                                                                                                          |
 | `--takeout`                    | Wraps only the file transfer, never the per-message lookup that floods, and a `TAKEOUT_INIT_DELAY` answer deadlocks tdl on its own mutex. Leave it off.                                                                                                                                                                                                                                                   |
 | `--template`                   | Pin it, per above.                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -108,6 +109,10 @@ scratch folder (ranges are repeated runs):
 - **One DC can stall on its own.** One run of that 1.3 GB file crawled at under 1 MB/s for 23 minutes
     through hundreds of `Acknowledge timed out` retries on DC 5, then ran at 11-12 MB/s with the same
     flags. A single slow run says nothing about the flags.
+- **Some files never arrive.** Telegram answered every `upload.getFile` for five old media in one
+    chat with FLOOD_WAIT_3 to FLOOD_WAIT_9, 254 times in five minutes, while other files downloaded
+    beside them; those transfers sat at 0 B for hours across runs. tdl retries forever, so the process
+    never exits on its own: a wrapper has to stop it when nothing has been written for a while.
 - **CPU count is irrelevant.** The only CPU work is MTProto decryption, about 1-3 ms per MiB, which
     gotd already spreads over every core whatever `--limit` says.
 - **Throttling is silent.** tdl sleeps through FLOOD_WAIT and FLOOD_PREMIUM_WAIT with no cap and no
@@ -187,5 +192,6 @@ Work down this ladder rather than guessing:
 3. **Do the messages still carry media?** Export the specific ids with `-T id -i <n>,<n> --all --raw`
     and look for a `Media` key.
 4. **Is it silent rather than stuck?** A tdl process producing no output for a long time is usually
-    absorbing a FLOOD_WAIT, which it does indefinitely and without saying so; `--debug` shows it.
-    Killing and retrying compounds it.
+    absorbing a FLOOD_WAIT, which it does indefinitely and without saying so; `--debug` shows it. A
+    wait on a lookup ends by itself and killing it only compounds it, but a file that draws a flood
+    wait on every request never arrives (see "Some files never arrive").

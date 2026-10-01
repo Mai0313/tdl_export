@@ -73,7 +73,7 @@ The first run on a chat archived by an older version does this automatically, be
 uv run tdl_export --limit 8
 ```
 
-Press Ctrl+C to stop. Finished files stay, and the next run continues from there.
+Press Ctrl+C to stop. Finished files stay, and the next run continues from there. A chat whose download writes nothing for five minutes is stopped and reported, and the next chat goes on.
 
 ## 📁 Directory Structure
 
