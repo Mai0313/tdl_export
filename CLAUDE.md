@@ -30,13 +30,14 @@ there and is only referred to from here.
 
 Read `gh-dev-flow` before starting; it owns the path from a task landing to the change being merged.
 
-**CI cannot currently fail on a test.** `test.yml` runs pytest only when a `tests/` directory exists,
-and that step is `uv run pytest -vv | tee .coverage.txt` with no `shell:` key anywhere in the file, so
-it runs under Actions' default `bash -e` — which does not set `pipefail` — and the pipeline reports
-`tee`'s status. A failing suite, a collection error and a missed coverage gate would all read as a
-pass. There are no tests today so nothing is being hidden yet, but adding the first one means fixing
-that step in the same change, or CI will report green on a red suite. `test.yml` comes from the repo
-template, so the fix belongs upstream as well as here.
+**The pytest step in `test.yml` keeps its explicit `shell: bash`.** That step pipes pytest into
+`tee`, and only an explicit shell runs with `pipefail`; under Actions' default `bash -e` a failing
+suite, a collection error and a missed coverage gate all read as a pass. The file comes from
+`Mai0313/repo_template`, so a template sync must keep that key.
+
+**Tests never touch `data/` or `~/.tdl`, and never run the real tdl.** `tests/conftest.py` points
+every data path at a temp dir and replaces `subprocess.run`, so a test that forgets its fake fails
+instead of reaching Telegram.
 
 ## Commands
 
@@ -44,6 +45,7 @@ template, so the fix belongs upstream as well as here.
 uv sync --all-groups                  # ruff, pytest and the docs tooling live in non-default groups
 uv run tdl_export <chat_id> ...       # mirror those chats; no arguments falls back to the list in cli.py
 uv run tdl_export <chat_id> --verify  # full re-export: refresh every recorded size, re-check every file
+make test                             # pytest, with the coverage gate from pyproject.toml
 make fmt                              # pre-commit: ruff, mdformat, codespell, ty, gitleaks, uv-lock
 make gen-docs                         # rebuild docs/ from the READMEs, src/ and scripts/
 ```
