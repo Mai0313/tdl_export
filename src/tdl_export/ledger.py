@@ -33,9 +33,9 @@ def lowercase_extensions(path: Path) -> None:
         names.add(target.name)
 
 
-def scan(path: Path, chat_id: str) -> dict[int, Path]:
+def scan(path: Path, chat_id: int) -> dict[int, Path]:
     """Map message id to the file tdl wrote for it, by reading the `--template` prefix back."""
-    pattern = re.compile(rf"^{re.escape(chat_id)}_(\d+)_")
+    pattern = re.compile(rf"^{chat_id}_(\d+)_")
     current: dict[int, Path] = {}
     for entry in path.iterdir():
         if not entry.is_file() or entry.suffix == ".tmp":
@@ -68,17 +68,12 @@ def find_pending(chat_data: ChatData, current: dict[int, Path]) -> list[Message]
     return pending
 
 
-def report_incomplete(pending: list[Message], chat_id: str, download_path: Path) -> None:
-    """The directory is the only honest answer, since tdl exits 0 even when files failed."""
-    current = scan(path=download_path, chat_id=chat_id)
-    failed = [
+def find_incomplete(pending: list[Message], path: Path, chat_id: int) -> list[int]:
+    """The ids of `pending` still missing or at the wrong size; tdl exits 0 even when files failed."""
+    current = scan(path=path, chat_id=chat_id)
+    return [
         message.id
         for message in pending
         if message.id not in current
         or (message.size is not None and current[message.id].stat().st_size != message.size)
     ]
-    if not failed:
-        return
-    shown = ", ".join(str(message_id) for message_id in failed[:20])
-    more = f" ... and {len(failed) - 20} more" if len(failed) > 20 else ""
-    console.print(f"[red]{len(failed)} message(s) still missing or incomplete: {shown}{more}")
