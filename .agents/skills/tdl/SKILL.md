@@ -118,7 +118,8 @@ scratch folder (ranges are repeated runs):
 - **Throttling is silent.** tdl sleeps through FLOOD_WAIT and FLOOD_PREMIUM_WAIT with no cap and no
     INFO-level log. Run with `--debug` and grep `~/.tdl/log/latest.log` (and its rotated `.gz`
     siblings, since debug output rotates it within minutes) for `"err_msg": "FLOOD_`. No captured run
-    above got a FLOOD_PREMIUM_WAIT.
+    above got a FLOOD_PREMIUM_WAIT. tdl keeps only three rotated logs, so a few minutes of `--debug`
+    push out every older one: copy `latest.log` first if its history matters.
 
 The `-f` JSON itself is read very narrowly: the top-level `id` (a **bare number**, and the **first**
 key, or you pay for materialising the whole array), and per message `id` plus `type == "message"` plus
