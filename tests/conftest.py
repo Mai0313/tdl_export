@@ -6,7 +6,15 @@ import subprocess
 import pytest
 from rich.console import Console
 
-from tdl_export import cli
+from tdl_export import cli, ledger
+
+CHAT = 1001
+
+
+def write(path: Path, size: int) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * size)
+    return path
 
 
 @pytest.fixture(autouse=True)
@@ -15,7 +23,9 @@ def isolated_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(cli, "CHAT_DIR", tmp_path / "chats")
     monkeypatch.setattr(cli, "DOWNLOAD_DIR", tmp_path / "downloads")
     # Plain and wide, so assertions on the text hold whatever FORCE_COLOR or COLUMNS says.
-    monkeypatch.setattr(cli, "console", Console(force_terminal=False, width=200))
+    plain = Console(force_terminal=False, width=200)
+    monkeypatch.setattr(cli, "console", plain)
+    monkeypatch.setattr(ledger, "console", plain)
 
     def refuse(*args: object, **kwargs: object) -> None:
         raise AssertionError(f"unexpected subprocess call: {args} {kwargs}")

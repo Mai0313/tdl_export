@@ -1,109 +1,11 @@
 import json
-from typing import Any
 from pathlib import Path
 
 import pytest
 
-from conftest import FakeTdl
-from tdl_export import cli
-from tdl_export.cli import Message, ChatData
-
-CHAT = 1001
-
-
-def write(path: Path, size: int) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"x" * size)
-    return path
-
-
-class TestGetMediaSize:
-    def test_document(self) -> None:
-        assert cli.get_media_size({"Media": {"Document": {"Size": 42}}}) == 42
-
-    def test_photo_takes_the_last_size(self) -> None:
-        raw = {"Media": {"Photo": {"Sizes": [{"Size": 10}, {"Size": 20}]}}}
-        assert cli.get_media_size(raw) == 20
-
-    def test_progressive_photo_takes_its_last_byte_count(self) -> None:
-        raw = {"Media": {"Photo": {"Sizes": [{"Size": 10}, {"Sizes": [5, 50, 500]}]}}}
-        assert cli.get_media_size(raw) == 500
-
-    @pytest.mark.parametrize(
-        "raw",
-        [{}, {"Media": None}, {"Media": {"Photo": {"Sizes": []}}}, {"Media": {"Webpage": {}}}],
-    )
-    def test_no_downloadable_media(self, raw: dict[str, Any]) -> None:
-        assert cli.get_media_size(raw) is None
-
-
-class TestArchive:
-    def test_missing_archive_is_empty(self, tmp_path: Path) -> None:
-        assert cli.load_chat_data(tmp_path / "absent.json") == ChatData()
-
-    def test_round_trip_leaves_no_staging_file(self, tmp_path: Path) -> None:
-        path = tmp_path / "nested" / "chat.json"
-        data = ChatData(id=CHAT, messages=[Message(id=1, file="a.jpg", size=3, text="hi")])
-        cli.save_chat_data(path, data)
-        assert cli.load_chat_data(path) == data
-        assert [p.name for p in path.parent.iterdir()] == ["chat.json"]
-
-    def test_merge_prefers_the_new_copy_and_sorts_newest_first(self) -> None:
-        old = ChatData(id=CHAT, messages=[Message(id=1, text="old"), Message(id=2)])
-        new = ChatData(id=CHAT, messages=[Message(id=3), Message(id=1, text="edited")])
-        merged = cli.merge_chat_data(old, new)
-        assert [m.id for m in merged.messages] == [3, 2, 1]
-        assert merged.messages[-1].text == "edited"
-
-
-class TestDisk:
-    def test_sweep_removes_only_temp_files(self, tmp_path: Path) -> None:
-        keep = write(tmp_path / f"{CHAT}_1_a.mp4", 1)
-        write(tmp_path / f"{CHAT}_2_b.mp4.tmp", 1)
-        cli.sweep_temp_files(tmp_path)
-        assert list(tmp_path.iterdir()) == [keep]
-
-    def test_lowercase_extensions(self, tmp_path: Path) -> None:
-        write(tmp_path / "a.MP4", 1)
-        (tmp_path / "dir.X").mkdir()
-        cli.lowercase_extensions(tmp_path)
-        assert sorted(p.name for p in tmp_path.iterdir()) == ["a.mp4", "dir.X"]
-
-    def test_lowercase_keeps_a_file_whose_target_exists(self, tmp_path: Path) -> None:
-        write(tmp_path / "a.JPG", 1)
-        if (tmp_path / "a.jpg").exists():
-            pytest.skip("both names can only coexist on a case-sensitive filesystem")
-        write(tmp_path / "a.jpg", 2)
-        cli.lowercase_extensions(tmp_path)
-        assert sorted(p.name for p in tmp_path.iterdir()) == ["a.JPG", "a.jpg"]
-
-    def test_scan_reads_only_this_chats_prefix(self, tmp_path: Path) -> None:
-        mine = write(tmp_path / f"{CHAT}_7_name_with_7_.mp4", 1)
-        write(tmp_path / f"{CHAT}_8_partial.mp4.tmp", 1)
-        write(tmp_path / f"9{CHAT}_9_other_chat.mp4", 1)
-        write(tmp_path / "unrelated.txt", 1)
-        assert cli.get_all_current_file(tmp_path, str(CHAT)) == {7: mine}
-
-    def test_pending(self, tmp_path: Path) -> None:
-        complete = write(tmp_path / f"{CHAT}_1_a", 5)
-        truncated = write(tmp_path / f"{CHAT}_2_b", 3)
-        unsized = write(tmp_path / f"{CHAT}_3_c", 9)
-        chat = ChatData(
-            id=CHAT,
-            messages=[
-                Message(id=1, file="a", size=5),
-                Message(id=2, file="b", size=5),
-                Message(id=3, file="c", size=None),
-                Message(id=4, file="d", size=5),
-                Message(id=5, file="", size=None),
-            ],
-        )
-        current = {1: complete, 2: truncated, 3: unsized}
-        pending = cli.get_pending_messages(chat, current)
-        assert [m.id for m in pending] == [2, 4]
-        assert not truncated.exists(), "a wrong-size file is removed before it is fetched again"
-        assert complete.exists()
-        assert unsized.exists()
+from conftest import CHAT, FakeTdl, write
+from tdl_export import cli, tdl, archive
+from tdl_export.archive import Message, ChatData
 
 
 class TestDownloadMedia:
@@ -119,12 +21,12 @@ class TestDownloadMedia:
         export, download = fake_tdl.calls
         assert "--input" not in export
         assert {"--all", "--with-content", "--raw"} <= set(export)
-        assert download[download.index("--template") + 1] == cli.NAME_TEMPLATE
+        assert download[download.index("--template") + 1] == tdl.NAME_TEMPLATE
         assert "--continue" in download
         folder = isolated_data / "downloads" / str(CHAT)
         assert sorted(p.name for p in folder.iterdir()) == [f"{CHAT}_1_a.jpg", f"{CHAT}_3_c.mp4"]
-        archive = cli.load_chat_data(isolated_data / "chats" / f"{CHAT}.json")
-        assert [(m.id, m.size) for m in archive.messages] == [(3, 6), (2, None), (1, 4)]
+        saved = archive.load(isolated_data / "chats" / f"{CHAT}.json")
+        assert [(m.id, m.size) for m in saved.messages] == [(3, 6), (2, None), (1, 4)]
 
     def test_request_file_puts_a_numeric_chat_id_first(self, fake_tdl: FakeTdl) -> None:
         fake_tdl.add(CHAT, 1, "a.jpg", 4)
@@ -171,7 +73,7 @@ class TestDownloadMedia:
     def test_an_archive_without_sizes_forces_a_full_export(
         self, fake_tdl: FakeTdl, isolated_data: Path
     ) -> None:
-        cli.save_chat_data(
+        archive.save(
             isolated_data / "chats" / f"{CHAT}.json",
             ChatData(id=CHAT, messages=[Message(id=1, file="a.jpg")]),
         )
