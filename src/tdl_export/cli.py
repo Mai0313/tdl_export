@@ -20,7 +20,7 @@ DOWNLOAD_DIR = Path("./data/downloads")
 NAME_TEMPLATE = "{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}"
 
 DEFAULT_CHAT_IDS = [
-    "5727382280",
+    # "5727382280",
     "3893137254",
     "8155177296",
     "8229333075",
