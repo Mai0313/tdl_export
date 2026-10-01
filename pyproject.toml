@@ -62,7 +62,7 @@ omit = ["*/__init__.py"]
 [project]
 name = "tdl_export"
 version = "0.1.0"
-description = "Repository template for Python projects"
+description = "Keep a local mirror of the media in Telegram chats, built on the tdl CLI"
 authors = [
     { name = "Wei", email = "mai@mai0313.com" },
 ]
