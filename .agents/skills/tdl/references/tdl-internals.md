@@ -1,8 +1,6 @@
 # tdl v0.20.4 internals
 
-Source citations behind every claim in `SKILL.md`. Read at tag `v0.20.4` (commit `9d7d49e`,
-2026-08-23). Line numbers move between releases; the surrounding code is quoted so you can find it
-again. Anything marked *measured* was confirmed by running the binary against a real chat.
+Source citations behind every claim in `SKILL.md`. Read at tag `v0.20.4` (commit `9d7d49e`, 2026-08-23). Line numbers move between releases; the surrounding code is quoted so you can find it again. Anything marked *measured* was confirmed by running the binary against a real chat.
 
 - [Failure handling](#failure-handling)
 - [Temp files and resume](#temp-files-and-resume)
@@ -36,9 +34,7 @@ wg.Go(func() (rerr error) {
 })
 ```
 
-`rerr` stays `nil` for every non-cancel error, so `OnDone` receives `nil`. In `app/dl/progress.go`
-that is the success branch: `p.it.Finish(...)` then `donePost(e)`, which renames the `.tmp` to the
-final name and sets the mtime. The error never reaches the process exit status.
+`rerr` stays `nil` for every non-cancel error, so `OnDone` receives `nil`. In `app/dl/progress.go` that is the success branch: `p.it.Finish(...)` then `donePost(e)`, which renames the `.tmp` to the final name and sets the mtime. The error never reaches the process exit status.
 
 The cancel branch is the only one that cleans up:
 
@@ -52,8 +48,7 @@ if err != nil {
 }
 ```
 
-*Measured*: a `SIGTERM` mid-transfer left the `.tmp` on disk, so the cleanup is not reliable under a
-hard kill.
+*Measured*: a `SIGTERM` mid-transfer left the `.tmp` on disk, so the cleanup is not reliable under a hard kill.
 
 Upstream issue #1150 ("files in the JSON never appear, exit 0") is the same symptom in the wild.
 
@@ -70,9 +65,7 @@ os.MkdirAll(filepath.Dir(path), 0o755)   // #113: a template may contain directo
 to, err := os.Create(path)
 ```
 
-`os.Create` is `O_RDWR|O_CREATE|O_TRUNC`, so a surviving `.tmp` is discarded, not resumed. Parts are
-written in parallel with `WriteAt` at arbitrary offsets, so a `.tmp` can also be full-length with
-holes — never size-check one.
+`os.Create` is `O_RDWR|O_CREATE|O_TRUNC`, so a surviving `.tmp` is discarded, not resumed. Parts are written in parallel with `WriteAt` at arbitrary offsets, so a `.tmp` can also be full-length with holes — never size-check one.
 
 `app/dl/dl.go` decides whether to prompt:
 
@@ -87,20 +80,11 @@ if ask {
 }
 ```
 
-With neither `--continue` nor `--restart`, `ask` is true and a leftover resume key puts an interactive
-prompt on stdin.
+With neither `--continue` nor `--restart`, `ask` is true and a leftover resume key puts an interactive prompt on stdin.
 
-The resume record is a bolt key `resume:<sha256>` whose fingerprint covers the exact sorted
-`(peer, message ids)` set, holding **logical positions**, not message ids. Adding or removing a single
-id invalidates it, and it is deleted on a successful run. It is not a download archive and cannot be
-used as one. `--desc` reorders the messages before the fingerprint is taken (`sortDialogs` at
-`app/dl/iter.go:95`), so it yields a different fingerprint rather than misreading an old one.
+The resume record is a bolt key `resume:<sha256>` whose fingerprint covers the exact sorted `(peer, message ids)` set, holding **logical positions**, not message ids. Adding or removing a single id invalidates it, and it is deleted on a successful run. It is not a download archive and cannot be used as one. `--desc` reorders the messages before the fingerprint is taken (`sortDialogs` at `app/dl/iter.go:95`), so it yields a different fingerprint rather than misreading an old one.
 
-The finished check runs after the message has been fetched (`app/dl/iter.go:177` precedes `:198`), so
-a resumed run still spends one `getHistory` per finished message; it saves transfers only. And a
-transfer that failed silently is marked finished too (`p.it.Finish` at `app/dl/progress.go:78` runs on
-the swallowed-error path), so `--continue` with an unchanged list skips a truncated file. `--restart`
-never loads the key.
+The finished check runs after the message has been fetched (`app/dl/iter.go:177` precedes `:198`), so a resumed run still spends one `getHistory` per finished message; it saves transfers only. And a transfer that failed silently is marked finished too (`p.it.Finish` at `app/dl/progress.go:78` runs on the swallowed-error path), so `--continue` with an unchanged list skips a truncated file. `--restart` never loads the key.
 
 ## --skip-same
 
@@ -117,15 +101,11 @@ if i.opts.SkipSame {
 }
 ```
 
-The name comparison is a tautology — both sides derive from the same string — so the operative rule is
-"the exact rendered path exists and its size matches". The help text's "without extension" is
-misleading: the extension had to match for the `Stat` to succeed at all.
+The name comparison is a tautology — both sides derive from the same string — so the operative rule is "the exact rendered path exists and its size matches". The help text's "without extension" is misleading: the extension had to match for the `Stat` to succeed at all.
 
-*Measured*: an identical 1.8 GB file was skipped instantly; the same file truncated to 100 bytes was
-re-downloaded; a copy under the same basename with a different extension was **not** matched.
+*Measured*: an identical 1.8 GB file was skipped instantly; the same file truncated to 100 bytes was re-downloaded; a copy under the same basename with a different extension was **not** matched.
 
-`--rewrite-ext` renames after download (`donePost` in `app/dl/progress.go` sniffs the MIME and swaps
-the extension), which puts the file at a path this `Stat` will never find.
+`--rewrite-ext` renames after download (`donePost` in `app/dl/progress.go` sniffs the MIME and swaps the extension), which puts the file at a path this `Stat` will never find.
 
 ## The naming template
 
@@ -137,29 +117,17 @@ cmd.Flags().String(consts.FlagDlTemplate,
     "download file name template")
 ```
 
-Read through viper with `AutomaticEnv` and the `tdl` prefix, so `TDL_TEMPLATE` replaces it when the
-flag is absent.
+Read through viper with `AutomaticEnv` and the `tdl` prefix, so `TDL_TEMPLATE` replaces it when the flag is absent.
 
-The template struct (`app/dl/iter.go`) has exactly seven fields: `DialogID int64`, `MessageID int`,
-`MessageDate int64`, `FileName`, `FileCaption`, `FileSize string`, `DownloadDate int64`. `DialogID` is
-`from.ID()` — gotd's `Channel.ID()` returns the raw channel id, so it is positive and carries no
-`-100` prefix.
+The template struct (`app/dl/iter.go`) has exactly seven fields: `DialogID int64`, `MessageID int`, `MessageDate int64`, `FileName`, `FileCaption`, `FileSize string`, `DownloadDate int64`. `DialogID` is `from.ID()` — gotd's `Channel.ID()` returns the raw channel id, so it is positive and carries no `-100` prefix.
 
-Never put `{{ now }}`, `{{ rand }}` or `{{ .DownloadDate }}` in a template you intend to parse:
-`DownloadDate` is `time.Now().Unix()` evaluated per file, so the same message renders a different name
-every run.
+Never put `{{ now }}`, `{{ rand }}` or `{{ .DownloadDate }}` in a template you intend to parse: `DownloadDate` is `time.Now().Unix()` evaluated per file, so the same message renders a different name every run.
 
-Custom functions available: `repeat`, `replace`, `upper`, `lower`, `snakecase`, `camelcase`,
-`kebabcase`, `filenamify`, `rand`, `now`, `formatDate`. `replace` is `strings.NewReplacer` over
-literal pairs, so there is no way to lower-case only the extension inside a template.
+Custom functions available: `repeat`, `replace`, `upper`, `lower`, `snakecase`, `camelcase`, `kebabcase`, `filenamify`, `rand`, `now`, `formatDate`. `replace` is `strings.NewReplacer` over literal pairs, so there is no way to lower-case only the extension inside a template.
 
-`filenamify` (flytam/filenamify) replaces `<>:"/\|?*` and the C0/C1 control ranges with `!`, collapses
-repeats, strips leading and trailing `!`, appends `!` to Windows reserved device names, and truncates
-to **100 runes including the extension**. It does not touch spaces or CJK.
+`filenamify` (flytam/filenamify) replaces `<>:"/\|?*` and the C0/C1 control ranges with `!`, collapses repeats, strips leading and trailing `!`, appends `!` to Windows reserved device names, and truncates to **100 runes including the extension**. It does not touch spaces or CJK.
 
-Default template history: `{{ .DialogID }}_{{ .MessageID }}_{{ .FileName }}` through v0.7.1, a
-`replace`-chain form through v0.17.7, and the current `filenamify` form from v0.18.1. The
-`<DialogID>_<MessageID>_` prefix is the only part that has never changed.
+Default template history: `{{ .DialogID }}_{{ .MessageID }}_{{ .FileName }}` through v0.7.1, a `replace`-chain form through v0.17.7, and the current `filenamify` form from v0.18.1. The `<DialogID>_<MessageID>_` prefix is the only part that has never changed.
 
 ## What counts as media
 
@@ -176,23 +144,16 @@ func ExtractMedia(m tg.MessageMediaClass) (*Media, bool) {
 }
 ```
 
-Everything else — web-page previews, paid media, stories, polls, giveaways — is invisible to tdl. So
-"the export returned N entries" is never "the chat contains N media items"; the honest claim is
-"everything tdl can download".
+Everything else — web-page previews, paid media, stories, polls, giveaways — is invisible to tdl. So "the export returned N entries" is never "the chat contains N media items"; the honest claim is "everything tdl can download".
 
-Names for media that has none of its own are synthesised and stable, which is what makes `--skip-same`
-possible at all (upstream #185):
+Names for media that has none of its own are synthesised and stable, which is what makes `--skip-same` possible at all (upstream #185):
 
 - photo → `<tg.Photo.ID>.jpg`, always `.jpg`, derived from the photo id rather than the message id
-- document with no `DocumentAttributeFilename` → `<tg.Document.ID><ext from MIME>`, falling back to
-    `.unknown`
+- document with no `DocumentAttributeFilename` → `<tg.Document.ID><ext from MIME>`, falling back to `.unknown`
 
-Because a photo's name comes from the photo id, the same image forwarded into two chats produces the
-same `file` string. Key on `(chat id, message id)`, never on the filename.
+Because a photo's name comes from the photo id, the same image forwarded into two chats produces the same `file` string. Key on `(chat id, message id)`, never on the filename.
 
-Sizes, for the `--raw` path: `Document.Size` for documents; for photos the last entry of
-`Photo.Sizes`, reading `.Sizes[-1]` when it is a `PhotoSizeProgressive` and `.Size` otherwise. This
-mirrors `GetPhotoSize`, which takes `sizes[len(sizes)-1]`.
+Sizes, for the `--raw` path: `Document.Size` for documents; for photos the last entry of `Photo.Sizes`, reading `.Sizes[-1]` when it is a `PhotoSizeProgressive` and `.Size` otherwise. This mirrors `GetPhotoSize`, which takes `sizes[len(sizes)-1]`.
 
 ## The `-f` input parser
 
@@ -213,10 +174,7 @@ if fm.File == "" && fm.Photo == "" && onlyMedia { continue }
 m.Messages = append(m.Messages, fm.ID)
 ```
 
-`onlyMedia` is hardcoded `true` by `app/dl/dl.go`, so text-only entries are dropped during parsing at
-no API cost. Decoding is `mapstructure.WeakDecode` with no `ErrorUnused`, so unknown fields are
-ignored — extra bookkeeping inside a message object is safe. Note it reads `date_unixtime`, not
-`date`, and never uses the value.
+`onlyMedia` is hardcoded `true` by `app/dl/dl.go`, so text-only entries are dropped during parsing at no API cost. Decoding is `mapstructure.WeakDecode` with no `ErrorUnused`, so unknown fields are ignored — extra bookkeeping inside a message object is safe. Note it reads `date_unixtime`, not `date`, and never uses the value.
 
 The chat id comes from a separate streaming scan that stops at the first depth-1 key named `id`:
 
@@ -224,13 +182,9 @@ The chat id comes from a separate streaming scan that stops at the first depth-1
 if _kv.Key == keyID { chatID = int64(_kv.Value.(float64)) }
 ```
 
-That type assertion is unchecked, so a string `"id"` panics rather than erroring. And because the scan
-materialises each top-level value as it goes, putting `messages` before `id` decodes the entire array
-just to find the chat id.
+That type assertion is unchecked, so a string `"id"` panics rather than erroring. And because the scan materialises each top-level value as it goes, putting `messages` before `id` decodes the entire array just to find the chat id.
 
-The depth-2 object scan is key-agnostic — any top-level array of objects carrying `id` and
-`type: "message"` becomes download targets. There is also no deduplication anywhere, so a repeated id
-is fetched twice and written twice to the same path.
+The depth-2 object scan is key-agnostic — any top-level array of objects carrying `id` and `type: "message"` becomes download targets. There is also no deduplication anywhere, so a repeated id is fetched twice and written twice to the same path.
 
 ## chat export
 
@@ -247,9 +201,7 @@ type Message struct {
 }
 ```
 
-`Date` and `Text` are only populated under `--with-content`; `Raw` only under `--raw`. There is no
-size, MIME, media-kind or album field in the plain output. The envelope is written by hand with a
-streaming encoder, `id` first, then `messages`.
+`Date` and `Text` are only populated under `--with-content`; `Raw` only under `--raw`. There is no size, MIME, media-kind or album field in the plain output. The envelope is written by hand with a streaming encoder, `id` first, then `messages`.
 
 Selection:
 
@@ -260,8 +212,7 @@ media, ok := tmedia.GetMedia(m)
 if !ok && !opts.All { continue }
 ```
 
-So `--all` means "also plain `*tg.Message` without downloadable media", not "literally everything",
-and message-id gaps in an export are expected.
+So `--all` means "also plain `*tg.Message` without downloadable media", not "literally everything", and message-id gaps in an export are expected.
 
 Ranges:
 
@@ -283,21 +234,15 @@ case 1: opts.Input = append(opts.Input, math.MaxInt)
 if opts.Input[0] > opts.Input[1] { opts.Input[0], opts.Input[1] = opts.Input[1], opts.Input[0] }
 ```
 
-so `-T id` alone is a full export and `-T id -i N` is "everything from N up". Out-of-order input is
-silently sorted. `-T last -i N` returns the newest N *matching* messages; `-T time` takes unix
-timestamps with the same shape.
+so `-T id` alone is a full export and `-T id -i N` is "everything from N up". Out-of-order input is silently sorted. `-T last -i N` returns the newest N *matching* messages; `-T time` takes unix timestamps with the same shape.
 
-`--filter` compiles an `expr-lang` expression over the fields `tdl chat export -f -` prints:
-`Mentioned, Silent, FromScheduled, Pinned, ID, FromID, Date, Message, Media.Name, Media.Size, Media.DC, Views, Forwards`. *Measured*: `Media.Size > 0` selects media-only without a nil dereference on text
-messages.
+`--filter` compiles an `expr-lang` expression over the fields `tdl chat export -f -` prints: `Mentioned, Silent, FromScheduled, Pinned, ID, FromID, Date, Message, Media.Name, Media.Size, Media.DC, Views, Forwards`. *Measured*: `Media.Size > 0` selects media-only without a nil dereference on text messages.
 
 The command prints its own warning that the output is "minimal JSON for tdl download, not for backup".
 
 ## Cost and rate limits
 
-Export iterates with `messages.NewIterator(q, 100)` behind a package-level limiter of 2 requests per
-second (burst 2). No flag changes it; `--delay` and `--pool` do not apply. *Measured*: 603 messages in
-4.3 s, 4,308 in 45 s, 10,980 in 2 m 10 s.
+Export iterates with `messages.NewIterator(q, 100)` behind a package-level limiter of 2 requests per second (burst 2). No flag changes it; `--delay` and `--pool` do not apply. *Measured*: 603 messages in 4.3 s, 4,308 in 45 s, 10,980 in 2 m 10 s.
 
 Download resolves each id separately (`core/util/tutil/tutil.go`):
 
@@ -308,66 +253,26 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 
 One round trip per id, serially, before any skip logic runs.
 
-`-l/--limit` is concurrent files (default 2, `cmd/root.go:163`), fed straight into
-`errgroup.SetLimit` (`core/downloader/downloader.go:37-38`); 0 hangs and a negative value is unlimited.
-`-t/--threads` is parts in flight per file (default 4), capped by size in `tutil.BestThreads`
-(`core/util/tutil/tutil.go:257-275`: 1 under 1 MiB, 2 under 5 MiB, 4 under 20 MiB, 8 under 50 MiB);
-each part is one 1 MiB `upload.getFile`. `--pool` (default 8, 0 = unlimited) caps connections per DC,
-and gotd hands each connection to one request at a time (`pool/pool.go:155-265` in gotd/td), so
-`limit x threads` above the pool just queues. `-s/--size` has been a no-op since v0.18.1.
+`-l/--limit` is concurrent files (default 2, `cmd/root.go:163`), fed straight into `errgroup.SetLimit` (`core/downloader/downloader.go:37-38`); 0 hangs and a negative value is unlimited. `-t/--threads` is parts in flight per file (default 4), capped by size in `tutil.BestThreads` (`core/util/tutil/tutil.go:257-275`: 1 under 1 MiB, 2 under 5 MiB, 4 under 20 MiB, 8 under 50 MiB); each part is one 1 MiB `upload.getFile`. `--pool` (default 8, 0 = unlimited) caps connections per DC, and gotd hands each connection to one request at a time (`pool/pool.go:155-265` in gotd/td), so `limit x threads` above the pool just queues. `-s/--size` has been a no-op since v0.18.1.
 
-The download loop is serial where it matters: `Download` calls `Iter.Next`, which takes the iterator
-mutex and runs `GetSingleMessage` under it (`app/dl/iter.go:151-177`) before `wg.Go` can start the next
-transfer. Finishing transfers take the same mutex in `iter.Finish` (`app/dl/iter.go:346`), so a slow or
-flood-waited lookup also holds back every download that completes meanwhile. Every file whose last
-part is under 1 MiB sleeps 200 ms in its slot for the progress bar (`core/downloader/progress.go:49-50`).
-Unlike `chat export`, `dl` adds no rate limiter of its own (`cmd/dl.go:32-34`).
+The download loop is serial where it matters: `Download` calls `Iter.Next`, which takes the iterator mutex and runs `GetSingleMessage` under it (`app/dl/iter.go:151-177`) before `wg.Go` can start the next transfer. Finishing transfers take the same mutex in `iter.Finish` (`app/dl/iter.go:346`), so a slow or flood-waited lookup also holds back every download that completes meanwhile. Every file whose last part is under 1 MiB sleeps 200 ms in its slot for the progress bar (`core/downloader/progress.go:49-50`). Unlike `chat export`, `dl` adds no rate limiter of its own (`cmd/dl.go:32-34`).
 
-FLOOD_WAIT and FLOOD_PREMIUM_WAIT are absorbed by gotd/contrib's `SimpleWaiter`
-(`core/tclient/tclient.go:90-96`), which sleeps the given seconds and retries with no cap and no log
-line, so a silent process is usually waiting rather than stuck. gotd logs the error at DEBUG only.
+FLOOD_WAIT and FLOOD_PREMIUM_WAIT are absorbed by gotd/contrib's `SimpleWaiter` (`core/tclient/tclient.go:90-96`), which sleeps the given seconds and retries with no cap and no log line, so a silent process is usually waiting rather than stuck. gotd logs the error at DEBUG only.
 
-`--takeout` wraps only `upload.getFile` (`core/downloader/downloader.go:83-86`); the lookups still go
-through `pool.Default`. When Telegram answers `account.initTakeoutSession` with
-`TAKEOUT_INIT_DELAY_X`, `pool.Takeout` calls `p.Client` while holding `p.mu`
-(`core/dcpool/dcpool.go:113-123` and `:57-58`), and the run deadlocks.
+`--takeout` wraps only `upload.getFile` (`core/downloader/downloader.go:83-86`); the lookups still go through `pool.Default`. When Telegram answers `account.initTakeoutSession` with `TAKEOUT_INIT_DELAY_X`, `pool.Takeout` calls `p.Client` while holding `p.mu` (`core/dcpool/dcpool.go:113-123` and `:57-58`), and the run deadlocks.
 
-A numeric chat id resolves through `tutil.GetInputPeer` → `manager.ResolveChannelID`, which needs the
-access hash from the local peer store at `~/.tdl/data`. On a fresh session that store is empty and the
-id alone will not resolve; `tdl chat ls` populates it. Usernames do not have this problem.
+A numeric chat id resolves through `tutil.GetInputPeer` → `manager.ResolveChannelID`, which needs the access hash from the local peer store at `~/.tdl/data`. On a fresh session that store is empty and the id alone will not resolve; `tdl chat ls` populates it. Usernames do not have this problem.
 
 ## Process lock
 
-Every Telegram command opens `~/.tdl/data/<ns>` with `bbolt.Open` (`pkg/kv/bolt.go:147`) and a 1 s
-lock timeout (`pkg/kv/legacy.go:16-17`), and closes it only in `PersistentPostRunE`
-(`cmd/root.go:115-119`). `main.go:21` maps the timeout to "Current database is used by another process,
-please terminate it first", printed with `color.Red` to stdout, exit 1. *Measured*: a second
-`tdl chat ls` started 0.31 s after the first failed at 1.78 s with that message.
+Every Telegram command opens `~/.tdl/data/<ns>` with `bbolt.Open` (`pkg/kv/bolt.go:147`) and a 1 s lock timeout (`pkg/kv/legacy.go:16-17`), and closes it only in `PersistentPostRunE` (`cmd/root.go:115-119`). `main.go:21` maps the timeout to "Current database is used by another process, please terminate it first", printed with `color.Red` to stdout, exit 1. *Measured*: a second `tdl chat ls` started 0.31 s after the first failed at 1.78 s with that message.
 
 ## Several `-f` files
 
-`--file` is a pflag string slice (`cmd/dl.go:48`), so it repeats, and a comma inside one path splits it.
-Each file becomes its own dialog with its own peer resolved while parsing
-(`pkg/tmessage/files.go:42-46`), and `dl.Run` returns before downloading anything if any of them fails
-(`app/dl/dl.go:65-68`). Dialogs are sorted by peer id and messages by id
-(`app/dl/iter.go:391-405`). The walk ends when the current dialog has no message left
-(`app/dl/iter.go:155-156`), which a dialog with none at all satisfies immediately, so the run returns
-nil there. A lookup error other than `ErrMessageDeleted` sets the iterator error and stops the run
-(`:190-191`); `GetSingleMessage` returns `invalid message %d` when the next-older history entry is not a
-`*tg.Message` (`core/util/tutil/tutil.go:186-189`), which is what a deleted message followed by a
-service message yields. The rendered name goes through `filepath.Join` and `os.MkdirAll`
-(`app/dl/iter.go:253-260`), so a template with a `/` creates the folder, with `\` on Windows.
+`--file` is a pflag string slice (`cmd/dl.go:48`), so it repeats, and a comma inside one path splits it. Each file becomes its own dialog with its own peer resolved while parsing (`pkg/tmessage/files.go:42-46`), and `dl.Run` returns before downloading anything if any of them fails (`app/dl/dl.go:65-68`). Dialogs are sorted by peer id and messages by id (`app/dl/iter.go:391-405`). The walk ends when the current dialog has no message left (`app/dl/iter.go:155-156`), which a dialog with none at all satisfies immediately, so the run returns nil there. A lookup error other than `ErrMessageDeleted` sets the iterator error and stops the run (`:190-191`); `GetSingleMessage` returns `invalid message %d` when the next-older history entry is not a `*tg.Message` (`core/util/tutil/tutil.go:186-189`), which is what a deleted message followed by a service message yields. The rendered name goes through `filepath.Join` and `os.MkdirAll` (`app/dl/iter.go:253-260`), so a template with a `/` creates the folder, with `\` on Windows.
 
 ## Interrupts
 
-`main.go:17` wraps the run in `signal.NotifyContext(..., os.Interrupt)`; Go delivers CTRL_C_EVENT and
-CTRL_BREAK_EVENT as that, while closing the console window arrives as SIGTERM, which tdl does not
-handle. gotd's `Client.Run` returns nil on `context.Canceled` (`telegram/connect.go:189-193` in
-gotd/td), so an interrupted tdl exits 0. In-flight transfers take the cancel branch quoted under
-"Failure handling" and delete their `.tmp`, but `Download` returns on the iterator's error without
-waiting for its workers (`core/downloader/downloader.go:66-70`), so one can survive.
+`main.go:17` wraps the run in `signal.NotifyContext(..., os.Interrupt)`; Go delivers CTRL_C_EVENT and CTRL_BREAK_EVENT as that, while closing the console window arrives as SIGTERM, which tdl does not handle. gotd's `Client.Run` returns nil on `context.Canceled` (`telegram/connect.go:189-193` in gotd/td), so an interrupted tdl exits 0. In-flight transfers take the cancel branch quoted under "Failure handling" and delete their `.tmp`, but `Download` returns on the iterator's error without waiting for its workers (`core/downloader/downloader.go:66-70`), so one can survive.
 
-`chat export` writes its closing brackets in defers (`app/chat/export.go:144-150`) while walking newest
-to oldest, so an interrupted export is valid JSON holding only the newest messages. *Measured* on
-Windows: Python's `subprocess.run` blocks in `WaitForSingleObject` until tdl has exited, and raises
-`KeyboardInterrupt` only then.
+`chat export` writes its closing brackets in defers (`app/chat/export.go:144-150`) while walking newest to oldest, so an interrupted export is valid JSON holding only the newest messages. *Measured* on Windows: Python's `subprocess.run` blocks in `WaitForSingleObject` until tdl has exited, and raises `KeyboardInterrupt` only then.
